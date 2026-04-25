@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,400&family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@300;500&display=swap');
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-mystic-dark: #0D0A18;
+  --color-cream: #e8d5b7;
+  --color-mystic-purple: #7a5a9a;
+  --color-mystic-dark-purple: #5a4a7a;
+  --color-amalgam-orange: #ff9a3c;
+  --color-amalgam-purple: #c77dff;
+}
+
+@layer base {
+  body {
+    @apply bg-mystic-dark text-cream selection:bg-amalgam-purple/30 font-serif;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: theme('colors.mystic-dark');
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2a2040;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3a3050;
+  }
+}
+
+@layer utilities {
+  .glow-purple {
+    text-shadow: 0 0 15px rgba(199, 125, 255, 0.4);
+  }
+  .glow-orange {
+    text-shadow: 0 0 15px rgba(255, 154, 60, 0.4);
+  }
+  .border-mystic {
+    border-color: rgba(122, 90, 154, 0.3);
+  }
+}
