@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, type MouseEvent, type TouchEvent, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { getNarrativeAction } from "./services/geminiService";
 import { 
   Moon, 
   Sun, 
@@ -23,34 +24,76 @@ import {
   Trash2,
   Trophy,
   Activity,
-  Maximize2
+  Maximize2,
+  Palette,
+  Info,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 
 // --- DATA CONSTANTS ---
 
-const FIRMAS_TAROT: Record<string, { firma: string; arquetipo: string }> = {
-  "El Loco": { firma: "Ξ{T}", arquetipo: "Inicio, caos fértil" },
-  "El Mago": { firma: "A{E}", arquetipo: "Acción creativa" },
-  "La Sacerdotisa": { firma: "S{R}", arquetipo: "Sabiduría oculta" },
-  "La Emperatriz": { firma: "E{M}", arquetipo: "Creación fértil" },
-  "El Emperador": { firma: "S{T}", arquetipo: "Estructura" },
-  "El Hierofante": { firma: "R{T}", arquetipo: "Transmisión" },
-  "Los Enamorados": { firma: "R{R}", arquetipo: "Elección, relación" },
-  "El Carro": { firma: "A{T}", arquetipo: "Dirección" },
-  "La Justicia": { firma: "T{S}", arquetipo: "Balance" },
-  "El Ermitaño": { firma: "Ξ{S}", arquetipo: "Introspección" },
-  "La Rueda": { firma: "E{V}", arquetipo: "Ciclo" },
-  "La Fuerza": { firma: "T{E}", arquetipo: "Instinto domado" },
-  "El Colgado": { firma: "V{T}", arquetipo: "Inversión" },
-  "La Muerte": { firma: "M{T}", arquetipo: "Transformación" },
-  "La Templanza": { firma: "E{S}", arquetipo: "Integración" },
-  "El Diablo": { firma: "S{V}", arquetipo: "Atadura" },
-  "La Torre": { firma: "T{A}", arquetipo: "Ruptura" },
-  "La Estrella": { firma: "E{R}", arquetipo: "Esperanza" },
-  "La Luna": { firma: "V{R}", arquetipo: "Inconsciente" },
-  "El Sol": { firma: "S{E}", arquetipo: "Claridad" },
-  "El Juicio": { firma: "R{E}", arquetipo: "Despertar" },
-  "El Mundo": { firma: "Ξ{E{R}}", arquetipo: "Integración total" },
+const PALETTES: Record<string, string[]> = {
+  Melchior: ["#60a5fa", "#3b82f6", "#1d4ed8", "#93c5fd", "#ffffff"],
+  Balthasar: ["#c084fc", "#a855f7", "#7e22ce", "#e9d5ff", "#ffffff"],
+  Casper: ["#ff9a3c", "#f97316", "#ea580c", "#fdba74", "#ffffff"],
+  Universal: ["#e8d5b7", "#ffffff", "#aaaaaa", "#7a5a9a", "#ff9a3c", "#60a5fa", "#c084fc"]
+};
+
+const TECNICAS = [
+  {
+    titulo: "Técnica Melchor (Estructura)",
+    desc: "Usa líneas rectas, ángulos y estructuras geométricas. Define límites claros y la arquitectura de tu tensión. Sé seco, técnico.",
+    color: "text-[#60a5fa]",
+    cerebro: "Melchior"
+  },
+  {
+    titulo: "Técnica Baltasar (Flujo)",
+    desc: "Usa curvas, círculos, espirales y manchas orgánicas. Deja que la mano fluya sin levantar el lápiz. Sé poético.",
+    color: "text-amalgam-purple",
+    cerebro: "Balthasar"
+  },
+  {
+    titulo: "Técnica Casper (Dirección)",
+    desc: "Dibuja glifos, flechas, puntos o tachones rápidos. Es un trazo de decisión. Marca el camino hacia la acción.",
+    color: "text-amalgam-orange",
+    cerebro: "Casper"
+  }
+];
+
+const ARCANOS = {
+  0: "El Loco", 1: "El Mago", 2: "La Sacerdotisa", 3: "La Emperatriz",
+  4: "El Emperador", 5: "El Hierofante", 6: "Los Enamorados",
+  7: "El Carro", 8: "La Justicia", 9: "El Ermitaño", 10: "La Rueda",
+  11: "La Fuerza", 12: "El Colgado", 13: "La Muerte", 14: "La Templanza",
+  15: "El Diablo", 16: "La Torre", 17: "La Estrella", 18: "La Luna",
+  19: "El Sol", 20: "El Juicio", 21: "El Mundo"
+};
+
+const HERO_JOURNEY_STAGES = [
+  "Mundo ordinario", "Llamada a la aventura", "Rechazo de la llamada",
+  "Encuentro con el mentor", "Umbral", "Pruebas, aliados, enemigos",
+  "Acercamiento", "Prueba difícil", "Recompensa", "Camino de regreso",
+  "Resurrección", "Regreso con el elixir"
+];
+
+const PERSONALITY_SIGNATURES: Record<string, string> = {
+  "P1_L": "control_estructural", "P1_E": "ansiedad_control",
+  "P2_L": "orden", "P2_E": "confianza_flujo",
+  "P3_L": "expansión", "P3_E": "contracción",
+  "P4_L": "luz", "P4_E": "sombra",
+  "P5_L": "conexión", "P5_E": "aislamiento",
+  "P6_L": "acción", "P6_E": "reacción",
+  "P7_L": "creación", "P7_E": "disolución",
+  "P8_L": "memoria", "P8_E": "olvido",
+  "P9_L": "verbo", "P9_E": "silencio",
+  "P10_L": "forma", "P10_E": "vacío",
+  "P11_L": "centro", "P11_E": "periferia",
+  "P12_L": "tiempo", "P12_E": "eternidad",
+  "P13_L": "vida", "P13_E": "muerte",
+  "P14_L": "sabiduría", "P14_E": "locura",
+  "P15_L": "poder", "P15_E": "servicio",
+  "P16_L": "identidad", "P16_E": "disolucion_identidad"
 };
 
 const FIRMAS_ASTRO: Record<string, { firma: string; desc: string }> = {
@@ -93,11 +136,17 @@ const PASOS: Step[] = [
 
 // --- COMPONENTS ---
 
-const DrawingCanvas = ({ label, color = "#e8d5b7", height = 200, onSave }: { label: string, color?: string, height?: number, onSave?: (data: string) => void }) => {
+const DrawingCanvas = ({ label, paletteKey = "Universal", height = 200, onSave }: { label: string, paletteKey?: string, height?: number, onSave?: (data: string) => void }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize, setBrushSize] = useState(2);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
+  const [activeColor, setActiveColor] = useState(PALETTES[paletteKey][0]);
+  const [showGuide, setShowGuide] = useState(false);
+
+  useEffect(() => {
+    setActiveColor(PALETTES[paletteKey][0]);
+  }, [paletteKey]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -141,13 +190,16 @@ const DrawingCanvas = ({ label, color = "#e8d5b7", height = 200, onSave }: { lab
     if (!ctx) return;
     
     ctx.lineWidth = brushSize;
-    ctx.strokeStyle = tool === "pen" ? color : "#0D0A18";
+    ctx.strokeStyle = tool === "pen" ? activeColor : "#0D0A18";
     ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
   };
 
   const stopDrawing = () => {
     setIsDrawing(false);
+  };
+
+  const save = () => {
     if (onSave && canvasRef.current) {
       onSave(canvasRef.current.toDataURL());
     }
@@ -171,16 +223,63 @@ const DrawingCanvas = ({ label, color = "#e8d5b7", height = 200, onSave }: { lab
   };
 
   return (
-    <div className="flex flex-col gap-2 mt-2">
-      <div className="flex justify-between items-center text-[0.6rem] uppercase tracking-[0.3em] text-mystic-purple mb-1 font-sans font-bold">
-        <span>{label}</span>
-        <div className="flex gap-4 items-center">
-          <button onClick={() => setTool("pen")} className={`p-1 transition-colors ${tool === "pen" ? "text-amalgam-purple" : "text-mystic-dark-purple"}`}><Edit3 className="w-3.5 h-3.5" /></button>
-          <button onClick={() => setTool("eraser")} className={`p-1 transition-colors ${tool === "eraser" ? "text-amalgam-orange" : "text-mystic-dark-purple"}`}><Eraser className="w-3.5 h-3.5" /></button>
-          <input type="range" min="1" max="10" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-12 h-1 accent-amalgam-purple bg-mystic-dark-purple rounded-full appearance-none cursor-pointer" />
-          <button onClick={clear} className="p-1 text-mystic-dark-purple hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+    <div className="flex flex-col gap-3 mt-4">
+      <div className="flex flex-col gap-4">
+        <div className="flex justify-between items-center text-[0.6rem] uppercase tracking-[0.3em] text-mystic-purple font-sans font-bold">
+          <div className="flex items-center gap-2">
+            <span>{label}</span>
+            <button 
+              onClick={() => setShowGuide(!showGuide)}
+              className="p-1 hover:text-white transition-colors flex items-center gap-1"
+            >
+              <Info className="w-3 h-3" />
+              <span className="text-[0.5rem] tracking-widest">{showGuide ? "Ocultar Guía" : "Guía"}</span>
+            </button>
+          </div>
+          <div className="flex gap-4 items-center">
+            <button onClick={() => setTool("pen")} className={`p-1 transition-colors ${tool === "pen" ? "text-amalgam-purple" : "text-mystic-dark-purple"}`}><Edit3 className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setTool("eraser")} className={`p-1 transition-colors ${tool === "eraser" ? "text-amalgam-orange" : "text-mystic-dark-purple"}`}><Eraser className="w-3.5 h-3.5" /></button>
+            <input type="range" min="1" max="10" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="w-12 h-1 accent-amalgam-purple bg-mystic-dark-purple rounded-full appearance-none cursor-pointer" />
+            <button onClick={clear} className="p-1 text-mystic-dark-purple hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {showGuide && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-[#12101e] border border-mystic/40 rounded-sm mb-2">
+                {TECNICAS.map(t => (
+                  <div key={t.titulo} className="space-y-1">
+                    <div className={`text-[0.55rem] font-bold uppercase tracking-wider ${t.color}`}>{t.titulo}</div>
+                    <p className="text-[0.65rem] text-cream/50 italic leading-relaxed font-serif">{t.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex flex-wrap gap-2 items-center bg-[#12101e] p-2 rounded-sm border border-mystic/30">
+          <Palette className="w-3 h-3 text-mystic-purple mr-1" />
+          {PALETTES[paletteKey].map((c) => (
+            <button
+              key={c}
+              onClick={() => {
+                setActiveColor(c);
+                setTool("pen");
+              }}
+              className={`w-5 h-5 rounded-full border transition-all ${activeColor === c && tool === "pen" ? "scale-125 border-white ring-2 ring-amalgam-purple/20" : "border-transparent opacity-60 hover:opacity-100"}`}
+              style={{ backgroundColor: c }}
+            />
+          ))}
         </div>
       </div>
+
       <canvas 
         ref={canvasRef} 
         onMouseDown={startDrawing}
@@ -192,6 +291,15 @@ const DrawingCanvas = ({ label, color = "#e8d5b7", height = 200, onSave }: { lab
         onTouchEnd={stopDrawing}
         className="w-full bg-[#0D0A18] border border-mystic rounded-sm cursor-crosshair touch-none shadow-inner"
       />
+
+      <div className="flex justify-center mt-4">
+        <button 
+          onClick={save}
+          className="px-8 py-3 bg-amalgam-purple text-white text-[0.7rem] uppercase tracking-[0.3em] font-bold hover:bg-amalgam-purple/80 transition-all rounded-sm flex items-center gap-3 shadow-[0_0_20px_rgba(199,125,255,0.2)] active:scale-95"
+        >
+          <Save className="w-4 h-4" /> Finalizar y Guardar Trazo
+        </button>
+      </div>
     </div>
   );
 };
@@ -204,75 +312,134 @@ export default function App() {
   
   const [session, setSession] = useState({
     date: new Date().toLocaleDateString("es-ES"),
-    luna: "Cáncer",
-    planeta: "Júpiter",
+    birthDate: { day: "", month: "", year: "" },
+    universeSeed: "",
+    lifeArcanum: "",
+    personalitySignature: "",
+    engine: {
+      cp: Array(7).fill(0).map(() => Math.random()),
+      step: 0,
+      coherence: 0.5,
+      tension: 0,
+      karma: Array(7).fill(0),
+    },
+    narrativeLog: [] as { id: number; text: string; role: 'engine' | 'player'; events?: string }[],
+    input: "",
+    currentView: 'start' as 'start' | 'init' | 'novel' | 'workshop' | 'history',
+    isAiLoading: false,
+    isDrawing: false,
+    drawingType: 'Universal',
+    // Legacy fields carried over for integration rituals
     pregunta: "",
-    carta: "El Loco",
-    polaridades: { p1: "", p2: "" },
-    firma: "",
-    pointX: "",
-    pointA: { vision: "", drawData: "" },
-    selectedPolarity: "",
-    integracionDraw: "",
-    extremos: { e1: "", e2: "", balance: "" },
-    caminoAmor: "",
-    reflexion: "",
+    interpretation: null as any | null,
   });
+
+  const calculateLifeArcanum = (d: string, m: string, y: string) => {
+    let sum = parseInt(d) + parseInt(m) + parseInt(y);
+    while (sum > 21) {
+      sum = sum.toString().split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+    }
+    return (ARCANOS as Record<number, string>)[sum] || ARCANOS[0];
+  };
+
+  const updateEngine = (action: string) => {
+    const forceMap: Record<string, number> = {
+      "explorar": 0.05, "luchar": -0.1, "dialogar": 0.02,
+      "huir": -0.05, "meditar": 0.1, "default": 0.0
+    };
+    
+    const force = forceMap[action.toLowerCase()] || forceMap["default"];
+    const newCp = session.engine.cp.map(v => Math.max(0, Math.min(1, v + force + (Math.random() - 0.5) * 0.01)));
+    
+    // Variance as a proxy for incoherence
+    const mean = newCp.reduce((a, b) => a + b, 0) / 7;
+    const variancia = newCp.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / 7;
+    const coherence = 1 - variancia;
+    
+    setSession(s => ({
+      ...s,
+      engine: {
+        ...s.engine,
+        cp: newCp,
+        step: s.engine.step + 1,
+        coherence,
+        tension: variancia * 2, // Simple tension heuristic
+      }
+    }));
+    return { cp: newCp, coherence, tension: variancia * 2 };
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem("amalgam_grimorio");
     if (saved) setHistory(JSON.parse(saved));
   }, []);
 
-  const nextStep = () => setStepIndex(prev => Math.min(prev + 1, 10));
-  const prevStep = () => setStepIndex(prev => Math.max(prev - 1, 0));
+  const handleNarrativeAction = async (action: string) => {
+    if (!action.trim()) return;
 
-  const saveToGrimorio = () => {
-    const newEntry = { ...session, id: Date.now() };
-    const newHistory = [newEntry, ...history];
-    setHistory(newHistory);
-    localStorage.setItem("amalgam_grimorio", JSON.stringify(newHistory));
-    setStepIndex(0); // Return after saving
+    // Update internal state
+    const { cp, coherence, tension } = updateEngine(action);
+    
+    // Add player action to log
+    setSession(s => ({
+      ...s,
+      input: "",
+      narrativeLog: [...s.narrativeLog, { id: Date.now(), text: action, role: 'player' }]
+    }));
+
+    // Get engine response
+    setSession(s => ({ ...s, isAiLoading: true }));
+    try {
+      const stage = HERO_JOURNEY_STAGES[Math.min(session.engine.step, HERO_JOURNEY_STAGES.length - 1)];
+      const res = await getNarrativeAction({
+        cp,
+        coherence,
+        tension,
+        stage,
+        arcano: session.lifeArcanum,
+        universe: session.universeSeed,
+        history: session.narrativeLog.map(l => l.text)
+      }, action);
+
+      setSession(s => ({
+        ...s,
+        isAiLoading: false,
+        narrativeLog: [...s.narrativeLog, { 
+          id: Date.now() + 1, 
+          text: res.narrativa, 
+          role: 'engine',
+          events: res.eventos
+        }]
+      }));
+    } catch (e) {
+      setSession(s => ({ ...s, isAiLoading: false }));
+    }
   };
 
-  // Compute Firma
-  useEffect(() => {
-    const ft = FIRMAS_TAROT[session.carta]?.firma || "Ξ";
-    const fa = FIRMAS_ASTRO[session.luna]?.firma || "M{V}";
-    setSession(s => ({ ...s, firma: `${ft} { ${fa} }` }));
-  }, [session.carta, session.luna]);
+  const handleInit = () => {
+    if (!session.birthDate.day || !session.birthDate.month || !session.birthDate.year || !session.universeSeed) return;
+    
+    const arcano = calculateLifeArcanum(session.birthDate.day, session.birthDate.month, session.birthDate.year);
+    setSession(s => ({ 
+      ...s, 
+      lifeArcanum: arcano,
+      currentView: 'novel',
+      narrativeLog: [{
+        id: Date.now(),
+        role: 'engine',
+        text: `El Arcano ${arcano} se activa. Te encuentras en el umbral de ${session.universeSeed}. El tejido de la realidad comienza a vibrar con tu presencia...`
+      }]
+    }));
+  };
 
   const step = stepIndex > 0 && stepIndex <= 10 ? PASOS[stepIndex - 1] : null;
 
   return (
     <div className="min-h-screen bg-[#0D0A18] text-[#e8d5b7] font-sans selection:bg-purple-500/30">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,400&family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@300;500&display=swap');
-        
-        :root {
-          --font-serif: 'Cormorant Garamond', serif;
-          --font-sans: 'Inter', sans-serif;
-          --font-mono: 'JetBrains Mono', monospace;
-        }
-
-        body {
-          font-family: var(--font-serif);
-          overflow-x: hidden;
-        }
-
-        .font-serif { font-family: var(--font-serif); }
-        .font-sans { font-family: var(--font-sans); }
-        .font-mono { font-family: var(--font-mono); }
-        
-        .bg-mystic {
-          background: radial-gradient(circle at 50% 50%, #1a162e 0%, #0d0a18 100%);
-        }
-      `}</style>
-
       <AnimatePresence mode="wait">
-        {stepIndex === 0 ? (
+        {session.currentView === 'start' ? (
           <motion.div 
-            key="intro"
+            key="start"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -289,537 +456,322 @@ export default function App() {
               transition={{ delay: 0.2 }}
               className="text-center z-10 font-serif"
             >
-              <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-mystic bg-white/5 text-[0.6rem] uppercase tracking-[0.4em] text-amalgam-purple">
+              <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full border border-mystic bg-white/5 text-[0.6rem] uppercase tracking-[0.4em] text-amalgam-purple font-sans font-bold">
                 <Compass className="w-3 h-3" />
-                Motor Amalgam
+                Amalgam Engine V9
               </div>
-              <h1 className="text-5xl md:text-7xl font-serif italic mb-6 tracking-[0.15em] text-white uppercase glow-purple">
-                Taller Vivo
+              <h1 className="text-6xl md:text-8xl font-serif italic mb-6 tracking-[0.1em] text-white uppercase glow-purple drop-shadow-2xl">
+                Amalgama
               </h1>
-              <p className="text-cream/60 max-w-md mx-auto mb-12 text-sm font-serif italic leading-relaxed tracking-wider">
-                Navega tensiones, recibe perspectivas MAGI y encuentra tu camino amor 
-                a través del tarot, la astrología y el dibujo sagrado.
+              <p className="text-cream/60 max-w-sm mx-auto mb-16 text-sm font-serif italic leading-relaxed tracking-wider">
+                Motor de Novela Interactiva basado en Física Simbólica.
+                Arte, Vida, Identidad y Sombra en una danza fractal.
               </p>
 
-              <div className="flex flex-col items-center gap-4">
+              <div className="flex flex-col items-center gap-6">
                 <button 
-                  onClick={() => setStepIndex(1)}
-                  className="group relative px-10 py-4 border border-amalgam-orange shadow-[0_0_15px_rgba(255,154,60,0.2)] text-amalgam-orange font-semibold rounded-sm uppercase tracking-[0.2em] transition-all hover:bg-amalgam-orange/10 active:scale-95 text-xs"
+                  onClick={() => setSession(s => ({ ...s, currentView: 'init' }))}
+                  className="group relative px-12 py-5 border border-amalgam-orange shadow-[0_0_30px_rgba(255,154,60,0.1)] text-amalgam-orange font-bold rounded-sm uppercase tracking-[0.3em] transition-all hover:bg-amalgam-orange/10 active:scale-95 text-xs bg-black/40"
                 >
-                  Comenzar Sesión
+                  Nuevo Destino
                 </button>
                 
                 <button 
-                  onClick={() => setStepIndex(11)}
-                  className="px-8 py-3 text-mystic-purple hover:text-white transition-colors text-[0.6rem] tracking-[0.3em] uppercase"
+                  onClick={() => setSession(s => ({ ...s, currentView: 'history' }))}
+                  className="px-8 py-3 text-mystic-purple hover:text-white transition-colors text-[0.6rem] tracking-[0.3em] uppercase font-sans font-bold"
                 >
-                  Ver Grimorio ({history.length})
-                </button>
-
-                <button 
-                  onClick={() => setStepIndex(12)}
-                  className="mt-4 flex items-center justify-center gap-2 text-[0.6rem] text-amalgam-orange/60 hover:text-amalgam-orange transition-colors uppercase tracking-[0.2em]"
-                >
-                  <Zap className="w-3 h-3" /> Llave de Emergencia
+                  Grimorio Antiguo ({history.length})
                 </button>
               </div>
             </motion.div>
           </motion.div>
-        ) : stepIndex === 11 ? (
+        ) : session.currentView === 'init' ? (
           <motion.div 
-            key="history"
-            initial={{ opacity: 0, x: 20 }}
+            key="init"
+            initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="min-h-screen p-6 max-w-4xl mx-auto"
+            exit={{ opacity: 0, x: -50 }}
+            className="min-h-screen flex items-center justify-center p-6 bg-mystic"
           >
-            <div className="flex justify-between items-center mb-12 border-b border-mystic pb-6">
-              <h2 className="text-3xl font-serif italic uppercase tracking-widest glow-purple">Grimorio de Sesiones</h2>
-              <button onClick={() => setStepIndex(0)} className="p-2 hover:bg-white/5 rounded-full text-mystic-purple"><X /></button>
+            <div className="max-w-md w-full space-y-12 bg-[#12101e] p-12 rounded-sm border border-mystic shadow-2xl relative">
+               <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-amalgam-purple/20 border border-amalgam-purple flex items-center justify-center">
+                  <Activity className="w-5 h-5 text-amalgam-purple" />
+               </div>
+               
+               <div className="text-center space-y-3">
+                 <div className="text-[0.6rem] uppercase tracking-[0.4em] text-amalgam-purple font-sans font-bold">Inicialización del Sistema</div>
+                 <h2 className="text-3xl font-serif italic text-white uppercase tracking-widest">Contrato de Origen</h2>
+               </div>
+               
+               <div className="space-y-8">
+                 <div className="space-y-4">
+                   <label className="text-[0.6rem] uppercase tracking-widest text-mystic-purple font-sans font-bold block">1. Fecha de Nacimiento (Sino Estructural)</label>
+                   <div className="grid grid-cols-3 gap-3">
+                     <input 
+                       placeholder="Día" 
+                       className="bg-black/50 border border-mystic/30 p-4 text-xs outline-none focus:border-amalgam-purple transition-all text-white placeholder:text-mystic-purple/40"
+                       value={session.birthDate.day}
+                       onChange={e => setSession(s => ({ ...s, birthDate: { ...s.birthDate, day: e.target.value } }))}
+                     />
+                     <input 
+                       placeholder="Mes" 
+                       className="bg-black/50 border border-mystic/30 p-4 text-xs outline-none focus:border-amalgam-purple transition-all text-white placeholder:text-mystic-purple/40"
+                       value={session.birthDate.month}
+                       onChange={e => setSession(s => ({ ...s, birthDate: { ...s.birthDate, month: e.target.value } }))}
+                     />
+                     <input 
+                       placeholder="Año" 
+                       className="bg-black/50 border border-mystic/30 p-4 text-xs outline-none focus:border-amalgam-purple transition-all text-white placeholder:text-mystic-purple/40"
+                       value={session.birthDate.year}
+                       onChange={e => setSession(s => ({ ...s, birthDate: { ...s.birthDate, year: e.target.value } }))}
+                     />
+                   </div>
+                 </div>
+
+                 <div className="space-y-4">
+                   <label className="text-[0.6rem] uppercase tracking-widest text-mystic-purple font-sans font-bold block">2. Semilla de Universo (Destino Elegido)</label>
+                   <textarea 
+                     placeholder="Ej: El mundo de Harry Potter, una ciudad de cristal y vapor..."
+                     className="w-full h-32 bg-black/50 border border-mystic/30 p-5 text-sm outline-none focus:border-amalgam-purple transition-all italic font-serif text-white placeholder:text-mystic-purple/40 resize-none"
+                     value={session.universeSeed}
+                     onChange={e => setSession(s => ({ ...s, universeSeed: e.target.value }))}
+                   />
+                 </div>
+
+                 <button 
+                   onClick={handleInit}
+                   disabled={!session.birthDate.day || !session.universeSeed}
+                   className="w-full py-5 bg-amalgam-purple/5 border border-amalgam-purple text-amalgam-purple uppercase tracking-[0.4em] text-[0.7rem] font-bold hover:bg-amalgam-purple hover:text-white transition-all shadow-[0_0_30px_rgba(199,125,255,0.05)] active:scale-[0.98] disabled:opacity-30"
+                 >
+                   Invocar Realidad
+                 </button>
+               </div>
+            </div>
+          </motion.div>
+        ) : session.currentView === 'novel' ? (
+          <motion.div 
+            key="novel"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="h-screen flex flex-col bg-[#0D0A18] font-serif"
+          >
+            {/* Header / HUD */}
+            <div className="fixed top-0 left-0 right-0 p-6 flex justify-between items-center z-50 bg-[#0D0A18]/80 backdrop-blur-xl border-b border-mystic/30">
+               <div className="flex items-center gap-10">
+                  <div className="flex flex-col">
+                    <span className="text-[0.5rem] uppercase tracking-[0.4em] text-amalgam-purple font-sans font-bold mb-1">Sino Arcano</span>
+                    <span className="text-sm italic text-white tracking-widest uppercase">{session.lifeArcanum}</span>
+                  </div>
+                  <div className="hidden md:flex gap-10">
+                    <div className="flex flex-col">
+                      <span className="text-[0.5rem] uppercase tracking-[0.4em] text-mystic-purple font-sans font-bold mb-1">Coherencia</span>
+                      <div className="w-24 h-1 bg-mystic-dark-purple overflow-hidden">
+                        <motion.div 
+                          animate={{ width: `${(session.engine.coherence * 100)}%` }}
+                          className="h-full bg-amalgam-purple"
+                        />
+                      </div>
+                    </div>
+                  </div>
+               </div>
+               <button 
+                 onClick={() => {
+                   const newHistory = [{...session, id: Date.now()}, ...history];
+                   setHistory(newHistory);
+                   localStorage.setItem("amalgam_grimorio", JSON.stringify(newHistory));
+                   setSession(s => ({ ...s, currentView: 'start' }));
+                 }}
+                 className="text-[0.5rem] uppercase tracking-[0.4em] px-4 py-2 hover:bg-red-500/10 hover:text-red-400 text-mystic-purple border border-transparent hover:border-red-500/20 transition-all font-sans font-bold"
+               >
+                 Guardar y Salir
+               </button>
             </div>
 
-            <div className="grid gap-6">
+            {/* Narrative Area */}
+            <div className="flex-1 overflow-y-auto px-6 pt-32 pb-48 space-y-12 max-w-4xl mx-auto w-full scroll-smooth">
+              <AnimatePresence mode="popLayout">
+                {session.narrativeLog.map((log, idx) => (
+                  <motion.div 
+                    key={log.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    className={`flex flex-col ${log.role === 'player' ? 'items-end' : 'items-start'}`}
+                  >
+                    {log.role === 'engine' ? (
+                      <div className="space-y-6 max-w-[95%]">
+                        <p className="text-xl md:text-2xl font-serif italic text-cream leading-[1.6] drop-shadow-lg whitespace-pre-wrap selection:bg-amalgam-purple/40">
+                          {log.text}
+                        </p>
+                        {log.events && (
+                          <motion.div 
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="inline-flex items-center gap-3 px-4 py-2 bg-amalgam-purple/5 border border-amalgam-purple/20 rounded-sm"
+                          >
+                            <Sparkles className="w-3 h-3 text-amalgam-purple" />
+                            <span className="text-[0.55rem] uppercase tracking-[0.2em] text-amalgam-purple italic font-sans font-bold">{log.events}</span>
+                          </motion.div>
+                        )}
+                        {idx === session.narrativeLog.length - 1 && (
+                           <div className="flex flex-wrap gap-3 pt-4">
+                              {["Explorar", "Meditar", "Hablar", "Dibujar"].map(opt => (
+                                <button 
+                                  key={opt}
+                                  onClick={() => {
+                                    if (opt === 'Dibujar') {
+                                      setSession(s => ({ ...s, isDrawing: true, drawingType: 'Universal' }));
+                                    } else {
+                                      handleNarrativeAction(opt);
+                                    }
+                                  }}
+                                  disabled={session.isAiLoading}
+                                  className="px-4 py-2 border border-mystic hover:border-amalgam-orange hover:text-amalgam-orange transition-all text-[0.6rem] uppercase tracking-widest text-mystic-purple font-sans font-bold"
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                           </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-4 bg-[#12101e] border-r-4 border-amalgam-orange/50 px-8 py-4 shadow-2xl relative overflow-hidden">
+                        <p className="text-sm font-mono text-amalgam-orange uppercase tracking-[0.2em]">{log.text}</p>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              
+              {session.isAiLoading && (
+                <div className="flex items-center gap-3 p-4">
+                  <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-2 h-2 rounded-full bg-amalgam-purple shadow-[0_0_10px_rgba(199,125,255,0.5)]" />
+                  <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.3 }} className="w-2 h-2 rounded-full bg-amalgam-purple shadow-[0_0_10px_rgba(199,125,255,0.5)]" />
+                  <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.6 }} className="w-2 h-2 rounded-full bg-amalgam-purple shadow-[0_0_10px_rgba(199,125,255,0.5)]" />
+                  <span className="text-[0.6rem] uppercase tracking-[0.3em] text-amalgam-purple italic animate-pulse font-sans font-bold ml-2">Sincronizando Realidad...</span>
+                </div>
+              )}
+            </div>
+
+            {/* Input Overlay */}
+            <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-[#0D0A18] via-[#0D0A18] to-transparent z-40">
+               <div className="max-w-3xl mx-auto relative">
+                 <input 
+                   disabled={session.isAiLoading}
+                   value={session.input}
+                   onChange={e => setSession(s => ({ ...s, input: e.target.value }))}
+                   onKeyDown={e => e.key === 'Enter' && handleNarrativeAction(session.input)}
+                   placeholder="Escribe tu intención..."
+                   className="w-full bg-[#12101e]/80 backdrop-blur-xl border border-mystic p-6 pl-14 rounded-sm text-sm font-mono text-white placeholder:text-mystic-purple/40 focus:border-amalgam-orange transition-all shadow-[0_0_50px_rgba(0,0,0,0.5)] outline-none"
+                 />
+                 <Edit3 className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-amalgam-orange/50" />
+                 <button 
+                  disabled={session.isAiLoading}
+                  onClick={() => handleNarrativeAction(session.input)}
+                  className="absolute right-6 top-1/2 -translate-y-1/2 p-2 text-amalgam-orange hover:text-white transition-all active:scale-95 disabled:opacity-20"
+                 >
+                   <ArrowRight className="w-6 h-6" />
+                 </button>
+               </div>
+            </div>
+          </motion.div>
+        ) : session.currentView === 'history' ? (
+          <motion.div 
+            key="history"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.02 }}
+            className="min-h-screen p-8 pt-16 max-w-4xl mx-auto bg-mystic"
+          >
+            <div className="flex justify-between items-center mb-16 border-b border-mystic/40 pb-8">
+              <div className="space-y-1">
+                <span className="text-[0.6rem] uppercase tracking-[0.4em] text-amalgam-purple font-sans font-bold">Registro Akáshico</span>
+                <h2 className="text-4xl font-serif italic uppercase tracking-widest text-white glow-purple">Grimorio de Sesiones</h2>
+              </div>
+              <button 
+                onClick={() => setSession(s => ({ ...s, currentView: 'start' }))} 
+                className="p-3 hover:bg-white/5 rounded-full text-mystic-purple border border-mystic/40 hover:text-white transition-all"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid gap-8">
               {history.length === 0 ? (
-                <div className="text-center py-24 text-mystic-purple/40 italic font-serif">Aún no has registrado sesiones en el campo.</div>
+                <div className="text-center py-32 text-mystic-purple/40 italic font-serif text-xl">Aún no has registrado sesiones.</div>
               ) : (
-                history.map((entry) => (
-                  <div key={entry.id} className="bg-[#12101e] p-6 rounded-lg border border-mystic hover:border-amalgam-purple/40 transition-all group">
-                    <div className="flex flex-wrap justify-between items-start gap-4 mb-4">
+                history.map((entry: any) => (
+                  <div key={entry.id} className="bg-[#12101e] p-8 rounded-sm border border-mystic hover:border-amalgam-purple/40 transition-all group relative overflow-hidden shadow-2xl">
+                    <div className="absolute top-0 right-0 w-1 h-full bg-amalgam-purple opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
                       <div>
-                        <div className="text-[0.55rem] uppercase tracking-[0.3em] text-amalgam-purple mb-1 font-mono">{entry.date}</div>
-                        <h3 className="text-xl font-serif italic text-white uppercase tracking-widest">{entry.carta} - <span className="text-amalgam-orange">{entry.luna}</span></h3>
+                        <div className="text-[0.6rem] uppercase tracking-[0.3em] text-amalgam-purple mb-2 font-mono font-bold">{entry.date}</div>
+                        <h3 className="text-2xl font-serif italic text-white uppercase tracking-widest">{entry.universeSeed || "Universo Sin Nombre"}</h3>
                       </div>
-                      <div className="font-mono text-xs bg-black/40 px-3 py-1 rounded-sm border border-mystic text-amalgam-purple glow-purple">{entry.firma}</div>
+                      <div className="font-mono text-[0.6rem] bg-black/40 px-4 py-2 border border-mystic text-amalgam-purple glow-purple tracking-widest">{entry.lifeArcanum}</div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-cream/70 font-serif">
-                      <div className="space-y-2">
-                        <div><span className="text-mystic-purple uppercase text-[0.6rem] tracking-widest mr-2 font-sans">Pregunta:</span> {entry.pregunta}</div>
-                        <div><span className="text-mystic-purple uppercase text-[0.6rem] tracking-widest mr-2 font-sans">Tensión:</span> {entry.polaridades.p1} <span className="text-amalgam-purple italic">↔</span> {entry.polaridades.p2}</div>
-                      </div>
-                      <div className="space-y-2 border-l border-mystic pl-6">
-                        <div className="text-amalgam-orange italic text-sm">" {entry.caminoAmor} "</div>
-                        <div className="text-cream/40 line-clamp-2 mt-2 text-xs">{entry.reflexion}</div>
-                      </div>
+                    <div className="text-sm text-cream/70 font-serif italic leading-relaxed line-clamp-3">
+                      {entry.narrativeLog?.[entry.narrativeLog.length-1]?.text || "Sin registros."}
                     </div>
                   </div>
                 ))
               )}
             </div>
           </motion.div>
-        ) : stepIndex === 12 ? (
-          <motion.div 
-            key="emergency"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.05 }}
-            className="h-screen flex flex-col items-center justify-center p-8 bg-[#0D0A18] text-center"
-          >
-            <div className="w-16 h-16 rounded-full bg-amalgam-orange/5 border border-amalgam-orange/20 flex items-center justify-center mb-8 shadow-[0_0_20px_rgba(255,154,60,0.1)]">
-              <Zap className="w-8 h-8 text-amalgam-orange" />
-            </div>
-            <h2 className="text-4xl font-serif italic mb-2 uppercase tracking-widest glow-orange text-white">Llave de Emergencia</h2>
-            <p className="text-[0.6rem] uppercase tracking-[0.4em] text-mystic-purple mb-12">Protocolo Rápido de 3 Pasos</p>
+        ) : null}
+      </AnimatePresence>
 
-            <div className="space-y-8 text-left max-w-sm w-full font-serif">
-              <div className="flex gap-6 items-start group">
-                <span className="text-amalgam-orange font-mono text-xs bg-amalgam-orange/10 px-2 py-1 rounded-sm border border-amalgam-orange/20">01</span>
-                <p className="text-sm text-cream/70 leading-relaxed"><strong className="text-white block mb-1 uppercase tracking-[0.2em] text-[0.6rem] font-sans">Pausa & Aliento</strong> Cierra los ojos y respira 3 veces. Visualiza tu centro como un punto de luz fija.</p>
-              </div>
-              <div className="flex gap-6 items-start group">
-                <span className="text-amalgam-orange font-mono text-xs bg-amalgam-orange/10 px-2 py-1 rounded-sm border border-amalgam-orange/20">02</span>
-                <p className="text-sm text-cream/70 leading-relaxed"><strong className="text-white block mb-1 uppercase tracking-[0.2em] text-[0.6rem] font-sans">La Semilla</strong> Di en voz alta: "Acepto mi tensión". Elige una palabra que describa tu bloqueo actual.</p>
-              </div>
-              <div className="flex gap-6 items-start group">
-                <span className="text-amalgam-orange font-mono text-xs bg-amalgam-orange/10 px-2 py-1 rounded-sm border border-amalgam-orange/20">03</span>
-                <p className="text-sm text-cream/70 leading-relaxed"><strong className="text-white block mb-1 uppercase tracking-[0.2em] text-[0.6rem] font-sans">Camino Amor</strong> Haz un garabato de 10 segundos con tu mano no dominante y suéltalo. El taller está hecho.</p>
-              </div>
-            </div>
-
-            <button 
-              onClick={() => setStepIndex(0)}
-              className="mt-16 px-10 py-3 border border-mystic text-mystic-purple rounded-sm text-[0.6rem] tracking-[0.3em] uppercase hover:bg-white/5 hover:text-white transition-all font-sans"
-            >
-              Regresar al Centro
-            </button>
-          </motion.div>
-        ) : (
+      <AnimatePresence>
+        {session.isDrawing && (
           <motion.div 
-            key="session"
-            className="min-h-screen flex flex-col lg:grid lg:grid-cols-[280px_1fr_320px] bg-[#0D0A18] relative overflow-hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md p-6 flex items-center justify-center"
           >
-            {/* Left Sidebar: Loop Info (Visible on Desktop) */}
-            <aside className="hidden lg:flex flex-col p-8 border-r border-mystic h-screen sticky top-0 overflow-y-auto">
-              <div className="text-[0.6rem] tracking-[0.4em] text-mystic-purple uppercase mb-8">Agent Loop // 10 Pasos</div>
-              <ul className="space-y-4 text-[0.75rem] font-serif">
-                {PASOS.map((p) => (
-                  <li 
-                    key={p.num} 
-                    className={`transition-all duration-300 ${
-                      p.num === stepIndex 
-                        ? "text-amalgam-orange border-l-2 border-amalgam-orange pl-3 -ml-px" 
-                        : p.num < stepIndex 
-                          ? "text-amalgam-purple opacity-60" 
-                          : "text-mystic-dark-purple"
-                    }`}
-                  >
-                    <div className="font-bold uppercase tracking-widest">{p.num.toString().padStart(2, '0')}. {p.titulo}</div>
-                    <div className="text-[0.6rem] italic opacity-60">{p.sub}</div>
-                  </li>
-                ))}
-              </ul>
-              
-              <div className="mt-auto pt-8">
-                <div className="p-5 border border-mystic bg-[#12101e] rounded-lg shadow-xl">
-                  <div className="text-[0.5rem] uppercase tracking-widest text-mystic-purple mb-2">Firma Actual</div>
-                  <div className="text-xl font-mono italic text-amalgam-purple glow-purple tracking-tighter truncate">
-                    {session.firma || "Ξ { M { V } }"}
-                  </div>
+            <div className="w-full max-w-4xl space-y-6">
+              <div className="flex justify-between items-center bg-[#12101e] p-6 border border-mystic rounded-t-sm">
+                <div className="flex flex-col">
+                  <span className="text-[0.6rem] uppercase tracking-[0.4em] text-amalgam-purple font-sans font-bold mb-1">Acto de Creación</span>
+                  <span className="text-xl italic text-white tracking-widest uppercase">Dibujo Simbólico</span>
+                </div>
+                <div className="flex items-center gap-6">
+                   <div className="flex gap-2">
+                     {['Melchior', 'Balthasar', 'Casper', 'Universal'].map(p => (
+                       <button 
+                         key={p}
+                         onClick={() => setSession(s => ({ ...s, drawingType: p }))}
+                         className={`px-3 py-1 text-[0.5rem] uppercase tracking-widest font-bold border transition-all ${session.drawingType === p ? 'bg-white text-black border-white' : 'text-mystic-purple border-mystic/30 hover:border-amalgam-purple'}`}
+                       >
+                         {p}
+                       </button>
+                     ))}
+                   </div>
+                   <button 
+                    onClick={() => setSession(s => ({ ...s, isDrawing: false }))}
+                    className="p-2 text-red-400 hover:text-red-300"
+                   >
+                     <X className="w-6 h-6" />
+                   </button>
                 </div>
               </div>
-            </aside>
-
-            {/* Main Content: The Wizard */}
-            <div className="flex-1 flex flex-col pt-24 lg:pt-8 pb-32 px-6 max-w-2xl mx-auto w-full overflow-y-auto scrollbar-hide">
-              {/* Header Progress Bar for all screens */}
-              <div className="fixed top-0 lg:top-auto lg:relative left-0 right-0 h-0.5 bg-white/5 z-50 lg:mb-12">
-                <motion.div 
-                  className="h-full bg-gradient-to-r from-amalgam-purple to-amalgam-orange shadow-[0_0_8px_rgba(255,154,60,0.3)]"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(stepIndex / 10) * 100}%` }}
+              <div className="bg-[#050505] p-2 border-x border-b border-mystic">
+                <DrawingCanvas 
+                  label={`Dibujo de tipo ${session.drawingType}`} 
+                  paletteKey={session.drawingType} 
+                  height={500}
+                  onSave={(data) => {
+                    handleNarrativeAction("Realicé un dibujo simbólico en el campo.");
+                    setSession(s => ({ ...s, isDrawing: false }));
+                  }}
                 />
               </div>
-
-              {/* Step Navigation Header (Mobile and desktop sub-header) */}
-              <div className="fixed top-0 lg:top-8 left-0 right-0 lg:relative lg:left-0 lg:right-0 p-4 lg:p-0 flex justify-between items-center bg-[#0D0A18]/90 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none z-40 border-b lg:border-0 border-mystic mb-8 transition-all">
-                <div className="flex items-center gap-4 lg:hidden">
-                  <span className="text-xs font-mono text-amalgam-purple bg-amalgam-purple/10 w-8 h-8 flex items-center justify-center rounded-sm">
-                    {stepIndex}
-                  </span>
-                  <div>
-                    <h3 className="text-[0.7rem] font-bold uppercase tracking-widest text-white leading-none">
-                      {step?.titulo}
-                    </h3>
-                    <p className="text-[0.55rem] text-mystic-purple uppercase mt-1 leading-none italic">
-                      {step?.sub}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex-1 hidden lg:block border-b border-mystic pb-6">
-                  <div className="text-[0.6rem] tracking-[0.4em] text-mystic-purple uppercase mb-1">
-                    {step?.sub}
-                  </div>
-                  <h1 className="text-4xl font-light italic uppercase tracking-widest text-white glow-purple">
-                    {step?.titulo}
-                  </h1>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <button onClick={() => setStepIndex(0)} className="text-mystic-purple hover:text-white transition-colors p-1"><X className="w-5 h-5" /></button>
-                </div>
+              <div className="text-center">
+                <p className="text-[0.6rem] text-mystic-purple uppercase tracking-[0.3em] italic">
+                  Captura la esencia de este momento. El guardado enviará la energía al motor.
+                </p>
               </div>
-
-            {/* MAIN STEP CONTENT */}
-            <AnimatePresence mode="wait">
-              <motion.div 
-                key={stepIndex}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="flex-1"
-              >
-                {/* Step 1: Pausa */}
-                {stepIndex === 1 && (
-                  <div className="space-y-8 py-4 text-center">
-                    <motion.div 
-                      animate={{ scale: [1, 1.05, 1], rotate: [0, 5, -5, 0] }} 
-                      transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                      className="w-24 h-24 rounded-full border border-mystic mx-auto flex items-center justify-center bg-[#12101e] shadow-[0_0_20px_rgba(199,125,255,0.1)]"
-                    >
-                      <Activity className="text-amalgam-purple w-8 h-8 glow-purple" />
-                    </motion.div>
-                    <div className="font-serif italic text-3xl text-white uppercase tracking-widest glow-purple">"El campo respira. Abro el taller."</div>
-                    <div className="space-y-8 text-left bg-[#12101e] p-8 rounded-lg border border-mystic shadow-2xl">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-3">
-                           <label className="text-[0.6rem] uppercase tracking-[0.2em] text-mystic-purple font-sans font-bold">Luna en Signo</label>
-                           <select 
-                            value={session.luna} 
-                            onChange={(e) => setSession(s => ({ ...s, luna: e.target.value }))}
-                            className="w-full bg-[#0D0A18] border border-mystic rounded-sm p-3 text-xs text-cream font-serif italic outline-none focus:border-amalgam-purple/40 transition-all appearance-none cursor-pointer"
-                           >
-                             {Object.keys(FIRMAS_ASTRO).map(sign => <option key={sign} value={sign}>{sign}</option>)}
-                           </select>
-                        </div>
-                        <div className="space-y-3">
-                           <label className="text-[0.6rem] uppercase tracking-[0.2em] text-mystic-purple font-sans font-bold">Planeta Regente</label>
-                           <select 
-                            value={session.planeta} 
-                            onChange={(e) => setSession(s => ({ ...s, planeta: e.target.value }))}
-                            className="w-full bg-[#0D0A18] border border-mystic rounded-sm p-3 text-xs text-cream font-serif italic outline-none focus:border-amalgam-purple/40 transition-all appearance-none cursor-pointer"
-                           >
-                             {PLANETAS.map(p => <option key={p} value={p}>{p}</option>)}
-                           </select>
-                        </div>
-                      </div>
-                      <div className="space-y-3 pt-6 border-t border-mystic/30">
-                        <label className="text-[0.6rem] uppercase tracking-[0.2em] text-mystic-purple font-sans font-bold block">Intención / Pregunta</label>
-                        <textarea 
-                          value={session.pregunta}
-                          onChange={(e) => setSession(s => ({ ...s, pregunta: e.target.value }))}
-                          placeholder="¿Qué necesito soltar hoy?"
-                          className="w-full bg-[#0D0A18] border border-mystic rounded-sm p-4 text-sm text-white placeholder:text-mystic-dark-purple font-serif italic min-h-[120px] outline-none focus:border-amalgam-purple/40 transition-colors resize-none shadow-inner"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 2: Melchior - Polaridades */}
-                {stepIndex === 2 && (
-                  <div className="space-y-10 py-4 font-serif">
-                    <div className="space-y-4">
-                      <label className="text-[0.6rem] uppercase tracking-[0.2em] text-mystic-purple block font-sans font-bold">Carta de Tarot</label>
-                      <select 
-                        value={session.carta} 
-                        onChange={(e) => setSession(s => ({ ...s, carta: e.target.value }))}
-                        className="w-full bg-[#0D0A18] border border-mystic rounded-sm p-4 text-sm font-serif italic text-white appearance-none cursor-pointer outline-none focus:border-amalgam-purple/40 shadow-xl"
-                      >
-                        {Object.keys(FIRMAS_TAROT).map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      <div className="p-4 bg-blue-500/5 border border-blue-500/10 rounded-sm text-[0.7rem] text-blue-300 italic">
-                        {FIRMAS_TAROT[session.carta].arquetipo}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="text-[0.6rem] uppercase tracking-[0.2em] text-mystic-purple block font-sans font-bold">Identificar dos opuestos claros</label>
-                      <div className="grid grid-cols-2 gap-8">
-                        <input 
-                          value={session.polaridades.p1}
-                          onChange={(e) => setSession(s => ({ ...s, polaridades: { ...s.polaridades, p1: e.target.value } }))}
-                          placeholder="Polo A"
-                          className="bg-transparent border-b border-mystic py-3 px-1 text-sm outline-none focus:border-blue-400 transition-colors placeholder:text-mystic-dark-purple italic"
-                        />
-                        <input 
-                          value={session.polaridades.p2}
-                          onChange={(e) => setSession(s => ({ ...s, polaridades: { ...s.polaridades, p2: e.target.value } }))}
-                          placeholder="Polo B"
-                          className="bg-transparent border-b border-mystic py-3 px-1 text-sm outline-none focus:border-blue-400 transition-colors placeholder:text-mystic-dark-purple italic"
-                        />
-                      </div>
-                    </div>
-
-                    <DrawingCanvas label="DIBUJO DE MELCHIOR (Arquitectura de la tensión)" color="#60a5fa" />
-                  </div>
-                )}
-
-                {/* Step 3: Balthasar - Firma */}
-                {stepIndex === 3 && (
-                  <div className="space-y-8 py-4">
-                    <div className="text-center space-y-4">
-                      <div className="text-[0.6rem] uppercase tracking-[0.4em] text-purple-400/60">Firma Amalgam</div>
-                      <div className="text-4xl md:text-5xl font-mono text-purple-300 italic tracking-tighter bg-black/30 py-8 rounded-3xl border border-white/5">
-                        {session.firma}
-                      </div>
-                    </div>
-                    
-                    <p className="text-xs text-cream/40 italic leading-relaxed px-4">
-                      Balthasar siente la conexión entre {session.carta} y la {session.luna}.
-                      Deja que la firma fluya hacia el papel.
-                    </p>
-
-                    <DrawingCanvas label="DIBUJO DE BALTHASAR (Formas fluidas, manchas)" color="#c084fc" height={250} />
-                  </div>
-                )}
-
-                {/* Step 4: Punto X */}
-                {stepIndex === 4 && (
-                  <div className="space-y-10 py-4 font-serif">
-                    <div className="p-8 bg-[#12101e] rounded-lg border border-mystic shadow-xl space-y-6">
-                      <p className="text-sm text-cream italic leading-relaxed">"Describe algo que ves ahora mismo, sin juzgar."</p>
-                      <textarea 
-                        value={session.pointX}
-                        onChange={(e) => setSession(s => ({ ...s, pointX: e.target.value }))}
-                        className="w-full bg-transparent border-b border-mystic p-3 text-sm outline-none focus:border-amalgam-purple/40 transition-colors h-20 italic font-serif"
-                        placeholder="La luz en la ventana, una taza de té..."
-                      />
-                    </div>
-                    <DrawingCanvas label="DIBUJO PUNTO X (Anclaje al presente)" color="#7a5a9a" />
-                  </div>
-                )}
-
-                {/* Step 5: Punto A */}
-                {stepIndex === 5 && (
-                  <div className="space-y-10 py-4 font-serif">
-                    <div className="space-y-4">
-                      <p className="text-sm text-cream/80 italic text-center font-serif leading-relaxed">Visualiza la tensión integrada en el futuro.</p>
-                      <DrawingCanvas 
-                        label="DIBUJO PUNTO A (Imagen del futuro recordado)" 
-                        color="#4ade80" 
-                        onSave={(data) => setSession(s => ({ ...s, pointA: { ...s.pointA, drawData: data } }))}
-                      />
-                    </div>
-                    <div className="space-y-3 pt-6">
-                       <label className="text-[0.6rem] uppercase tracking-[0.2em] text-mystic-purple block font-sans font-bold">"En ese instante, la tensión se disuelve porque..."</label>
-                       <textarea 
-                          value={session.pointA.vision}
-                          onChange={(e) => setSession(s => ({ ...s, pointA: { ...s.pointA, vision: e.target.value } }))}
-                          className="w-full bg-[#12101e] border border-mystic rounded-sm p-4 text-sm text-white font-serif italic min-h-[100px] outline-none focus:border-amalgam-purple/40 shadow-inner"
-                          placeholder="Escribe la revelación del futuro..."
-                       />
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 6: Casper - Polaridad Central */}
-                {stepIndex === 6 && (
-                  <div className="space-y-12 py-12">
-                    <div className="text-center space-y-6">
-                      <p className="text-[0.6rem] text-mystic-purple uppercase tracking-[0.4em] font-sans font-bold">Elige el polo que más resuena hoy</p>
-                      <div className="flex flex-col gap-8 max-w-xs mx-auto">
-                        <button 
-                          onClick={() => setSession(s => ({ ...s, selectedPolarity: s.polaridades.p1 }))}
-                          className={`p-8 rounded-sm border-2 transition-all font-serif italic ${session.selectedPolarity === session.polaridades.p1 ? "border-amalgam-orange bg-amalgam-orange/5 text-white shadow-[0_0_20px_rgba(255,154,60,0.15)]" : "border-mystic hover:border-amalgam-orange/40 text-cream/40"}`}
-                        >
-                          <div className="text-3xl uppercase tracking-widest">{session.polaridades.p1 || "Polo A"}</div>
-                        </button>
-                        <div className="text-[0.6rem] font-mono text-mystic-dark-purple">O</div>
-                        <button 
-                          onClick={() => setSession(s => ({ ...s, selectedPolarity: s.polaridades.p2 }))}
-                          className={`p-8 rounded-sm border-2 transition-all font-serif italic ${session.selectedPolarity === session.polaridades.p2 ? "border-amalgam-orange bg-amalgam-orange/5 text-white shadow-[0_0_20px_rgba(255,154,60,0.15)]" : "border-mystic hover:border-amalgam-orange/40 text-cream/40"}`}
-                        >
-                          <div className="text-3xl uppercase tracking-widest">{session.polaridades.p2 || "Polo B"}</div>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 7: Punto B - Integración */}
-                {stepIndex === 7 && (
-                  <div className="space-y-10 py-4">
-                    <div className="space-y-3 text-center">
-                      <p className="text-base text-cream italic font-serif leading-relaxed px-4">
-                        Dibuja algo que integre los dos polos. Este es el dibujo principal de la sesión.
-                      </p>
-                      <div className="inline-flex items-center gap-4 text-[0.6rem] uppercase tracking-[0.4em] text-amalgam-orange font-mono bg-amalgam-orange/5 px-4 py-1.5 border border-amalgam-orange/10 rounded-full mt-2">
-                        <span className="opacity-80">{session.polaridades.p1 || "Polo A"}</span>
-                        <span className="text-amalgam-purple text-xs">↔</span>
-                        <span className="opacity-80">{session.polaridades.p2 || "Polo B"}</span>
-                      </div>
-                    </div>
-                    <DrawingCanvas 
-                      label="EL DIBUJO DE INTEGRACIÓN (10-15 min de flujo)" 
-                      color="#ff9a3c" 
-                      height={380}
-                      onSave={(data) => setSession(s => ({ ...s, integracionDraw: data }))}
-                    />
-                  </div>
-                )}
-
-                {/* Step 8: Extremos */}
-                {stepIndex === 8 && (
-                  <div className="space-y-10 py-4 font-serif italic">
-                    <div className="grid gap-10">
-                      <div className="space-y-3">
-                        <label className="text-[0.6rem] uppercase tracking-[0.2em] text-amalgam-orange block font-sans font-bold not-italic">Extremo 1</label>
-                        <textarea 
-                          value={session.extremos.e1}
-                          onChange={(e) => setSession(s => ({ ...s, extremos: { ...s.extremos, e1: e.target.value } }))}
-                          placeholder={`Si me inclinara solo hacia ${session.polaridades.p1 || "el polo A"}...`}
-                          className="w-full bg-[#12101e] border border-mystic rounded-sm p-5 text-sm italic outline-none focus:border-amalgam-orange/40 min-h-[100px] shadow-inner"
-                        />
-                      </div>
-                      <div className="space-y-3">
-                        <label className="text-[0.6rem] uppercase tracking-[0.2em] text-amalgam-orange block font-sans font-bold not-italic">Extremo 2</label>
-                        <textarea 
-                          value={session.extremos.e2}
-                          onChange={(e) => setSession(s => ({ ...s, extremos: { ...s.extremos, e2: e.target.value } }))}
-                          placeholder={`Si me inclinara solo hacia ${session.polaridades.p2 || "el polo B"}...`}
-                          className="w-full bg-[#12101e] border border-mystic rounded-sm p-5 text-sm italic outline-none focus:border-amalgam-orange/40 min-h-[100px] shadow-inner"
-                        />
-                      </div>
-                      <div className="space-y-3 pt-8 border-t border-mystic">
-                        <label className="text-[0.6rem] uppercase tracking-[0.2em] text-amalgam-purple block font-sans font-bold not-italic">Punto Medio de Deseo</label>
-                        <textarea 
-                          value={session.extremos.balance}
-                          onChange={(e) => setSession(s => ({ ...s, extremos: { ...s.extremos, balance: e.target.value } }))}
-                          placeholder="Me gustaría que mi camino estuviera en un balance entre..."
-                          className="w-full bg-amalgam-purple/5 border border-amalgam-purple/20 rounded-sm p-5 text-sm italic outline-none focus:border-amalgam-purple/40 shadow-inner"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 9: Camino Amor */}
-                {stepIndex === 9 && (
-                  <div className="space-y-16 py-12 text-center font-serif italic">
-                    <Zap className="w-12 h-12 text-amalgam-orange mx-auto mb-4 animate-pulse glow-orange" />
-                    <div className="space-y-8">
-                      <h2 className="text-3xl font-serif italic uppercase tracking-widest text-white leading-relaxed">¿Cuál es la mínima <br/><span className="text-amalgam-orange glow-orange">acción viable</span>?</h2>
-                      <textarea 
-                        value={session.caminoAmor}
-                        onChange={(e) => setSession(s => ({ ...s, caminoAmor: e.target.value }))}
-                        className="w-full bg-transparent border-b border-mystic p-4 text-center font-serif italic text-2xl outline-none focus:border-amalgam-orange transition-all placeholder:text-mystic-dark-purple"
-                        placeholder="Escribe la semilla de acción..."
-                      />
-                      <p className="text-[0.6rem] text-mystic-purple uppercase tracking-[0.4em] max-w-xs mx-auto font-sans font-bold leading-relaxed opacity-60">
-                        Un pequeño gesto para <br/>manifestar hoy.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 10: Reporte de Memoria */}
-                {stepIndex === 10 && (
-                  <div className="space-y-10 py-4 text-center font-serif italic">
-                    <Trophy className="w-16 h-16 text-amalgam-purple/40 mx-auto mb-2 glow-purple" />
-                    <div className="font-serif text-3xl italic mb-6 uppercase tracking-widest text-white">"El campo respira. <br/>Cierro el taller."</div>
-                    
-                    <div className="space-y-4 text-left">
-                      <label className="text-[0.6rem] uppercase tracking-[0.2em] text-mystic-purple mb-1 block font-sans font-bold not-italic">Reflexión Final</label>
-                      <textarea 
-                        value={session.reflexion}
-                        onChange={(e) => setSession(s => ({ ...s, reflexion: e.target.value }))}
-                        className="w-full bg-[#12101e] border border-mystic rounded-sm p-8 text-sm italic outline-none focus:border-amalgam-purple/40 min-h-[180px] shadow-2xl"
-                        placeholder="¿Qué ha cambiado en mi mirada?"
-                      />
-                    </div>
-
-                    <div className="pt-10">
-                       <button 
-                        onClick={saveToGrimorio}
-                        className="w-full flex items-center justify-center gap-4 py-4 bg-amalgam-purple/5 border border-amalgam-purple/30 rounded-sm text-amalgam-purple font-bold uppercase text-[0.65rem] tracking-[0.4em] hover:bg-amalgam-purple/10 hover:text-white transition-all shadow-[0_0_20px_rgba(199,125,255,0.05)]"
-                       >
-                         <Save className="w-4 h-4" /> Guardar en Grimorio
-                       </button>
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-
-            {/* Navigation controls sticky bar */}
-            <div className="fixed bottom-0 left-0 right-0 lg:left-[280px] lg:right-[320px] p-6 flex justify-between gap-6 bg-gradient-to-t from-[#0D0A18] via-[#0D0A18] to-transparent z-40 border-t border-mystic bg-mystic-dark/95 backdrop-blur-sm">
-              <button 
-                onClick={prevStep}
-                disabled={stepIndex === 1}
-                className="group flex-1 flex items-center justify-center gap-3 py-3 px-6 border border-mystic bg-white/5 rounded-sm disabled:opacity-10 text-[0.65rem] uppercase tracking-[0.2em] transition-all hover:bg-white/10 active:scale-95"
-              >
-                <ArrowLeft className="w-3 h-3 group-hover:-translate-x-1 transition-transform" /> Atrás
-              </button>
-              
-              <button 
-                onClick={nextStep}
-                disabled={stepIndex === 10}
-                className="group flex-[2] flex items-center justify-center gap-3 py-3 px-6 bg-[#1a1228] border border-amalgam-orange shadow-[0_0_15px_rgba(255,154,60,0.1)] text-amalgam-orange font-semibold rounded-sm text-[0.65rem] uppercase tracking-[0.2em] transition-all hover:bg-amalgam-orange/10 hover:shadow-[0_0_20px_rgba(255,154,60,0.2)] active:scale-98 disabled:opacity-5"
-              >
-                {stepIndex === 10 ? "Comenzar Cierre" : "Siguiente Paso"} <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
-              </button>
             </div>
-            </div>
-
-            {/* Right Sidebar: MAGI Compass & Tarot (Visible on Desktop) */}
-            <aside className="hidden lg:flex flex-col p-8 border-l border-mystic h-screen sticky top-0 overflow-y-auto bg-mystic-dark/50">
-              <div className="text-[0.6rem] tracking-[0.4em] text-mystic-purple uppercase mb-6">Brújula MAGI</div>
-              
-              <div className="space-y-4">
-                <div className={`p-5 bg-[#1a1228] border border-mystic rounded-lg transition-all duration-500 ${step?.cerebro === "Melchior" ? "ring-1 ring-blue-400/30 border-blue-400/30 translate-x-1" : "opacity-40"}`}>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[0.7rem] font-bold uppercase tracking-widest text-blue-300">Melchior</span>
-                    <span className="font-mono text-[0.55rem] text-mystic-purple">ESTRUCTURA</span>
-                  </div>
-                  <p className="text-[0.7rem] italic text-cream/70 leading-relaxed font-serif">"¿Qué es innegable aquí?" — Analiza la geometría de la tensión.</p>
-                </div>
-
-                <div className={`p-5 bg-[#1a1228] border border-mystic rounded-lg transition-all duration-500 ${step?.cerebro === "Balthasar" ? "ring-1 ring-amalgam-purple/30 border-amalgam-purple/30 translate-x-1" : "opacity-40"}`}>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[0.7rem] font-bold uppercase tracking-widest text-amalgam-purple">Balthasar</span>
-                    <span className="font-mono text-[0.55rem] text-mystic-purple">FLUJO</span>
-                  </div>
-                  <p className="text-[0.7rem] italic text-cream/70 leading-relaxed font-serif">"¿Qué quiere expandirse?" — Siente las conexiones orgánicas.</p>
-                </div>
-
-                <div className={`p-5 bg-[#1a1228] border border-mystic rounded-lg transition-all duration-500 ${step?.cerebro === "Casper" ? "ring-1 ring-amalgam-orange/30 border-amalgam-orange/30 translate-x-1" : "opacity-40"}`}>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[0.7rem] font-bold uppercase tracking-widest text-amalgam-orange">Casper</span>
-                    <span className="font-mono text-[0.55rem] text-mystic-purple">DECISIÓN</span>
-                  </div>
-                  <p className="text-[0.7rem] italic text-cream/70 leading-relaxed font-serif">"¿Qué pequeño gesto es viable?" — Busca la síntesis pragmática.</p>
-                </div>
-              </div>
-
-              {/* Current Context Card */}
-              <div className="mt-auto aspect-[2/3] bg-mystic-dark border border-mystic rounded-xl relative overflow-hidden flex flex-col p-6 items-center justify-center text-center shadow-2xl">
-                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_#c77dff_0%,transparent_70%)]" />
-                <div className="text-[0.55rem] uppercase tracking-[0.3em] text-mystic-purple mb-6 z-10">Carga Activa</div>
-                <div className="text-5xl font-light mb-4 z-10 glow-orange">{session.carta === "El Loco" ? "0" : "•"}</div>
-                <h4 className="text-xl font-serif italic text-white mb-2 z-10 uppercase tracking-widest">{session.carta || "Sin Carta"}</h4>
-                <div className="text-[0.55rem] font-mono text-mystic-purple uppercase z-10 mt-auto">Amalgam Engine S3</div>
-              </div>
-            </aside>
           </motion.div>
         )}
       </AnimatePresence>
