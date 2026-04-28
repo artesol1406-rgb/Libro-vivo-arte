@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, type MouseEvent, type TouchEvent, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { getNarrativeAction, getUniverseAnalysis, type UniverseAnalysis } from "./services/geminiService";
+import { getNarrativeAction, getUniverseAnalysis, getPreludeQuestions, type UniverseAnalysis, type PreludeQuestion } from "./services/geminiService";
 import { 
   Moon, 
   Sun, 
@@ -311,6 +311,19 @@ const FIRMAS_ASTRO: Partial<Record<Language, Record<string, { firma: string; des
 };
 
 const PLANETAS = ["Sol", "Luna", "Marte", "Mercurio", "Júpiter", "Venus", "Saturno"];
+const AMALGAM_GLOSSARY = [
+  { s: "S", n: "Sistema", e: "Estructura fija, contenedor / Campo de posibilidades" },
+  { s: "Ξ", n: "Xi (Pausa)", e: "Silencio medible, intervalo / Escucha activa" },
+  { s: "φ_e", n: "Phi Expansivo", e: "Tamaño, extensión / Crecimiento relacional" },
+  { s: "φ_c", n: "Phi Contractivo", e: "Densidad, concentración / Pliegue creativo" },
+  { s: "A", n: "Acción", e: "Evento discreto / Proceso continuo" },
+  { s: "F", n: "Foco", e: "Punto de atención / Flujo de energía" },
+  { s: "T", n: "Tensión", e: "Diferencia medible / Motor de cambio" },
+  { s: "R", n: "Relación", e: "Vínculo estático / Intercambio dinámico" },
+  { s: "M", n: "Memoria", e: "Archivo fijo / Recuerdo vivo" },
+  { s: "E", n: "Expansión", e: "Operador de crecimiento / Amor, Tiempo" },
+  { s: "V", n: "Vaciamiento", e: "Ausencia, hueco / Liberación activa" },
+];
 
 interface Step {
   num: number;
@@ -522,17 +535,32 @@ export default function App() {
       coherence: 0.5,
       tension: 0,
       karma: Array(7).fill(0),
+      currentFirma: "S { Ξ }",
     },
-    narrativeLog: [] as { id: number; text: string; role: 'engine' | 'player'; events?: string }[],
+    narrativeLog: [] as { id: number; text: string; role: 'engine' | 'player'; events?: string; firma?: string; question?: string }[],
     input: "",
-    currentView: 'language' as 'language' | 'start' | 'init' | 'novel' | 'workshop' | 'history',
+    currentView: 'language' as 'language' | 'start' | 'init' | 'prelude' | 'organizing' | 'novel' | 'workshop' | 'history',
     isAiLoading: false,
     isDrawing: false,
     drawingType: 'Universal',
     analysis: null as UniverseAnalysis | null,
+    preludeQuestions: [] as PreludeQuestion[],
+    preludeIndex: 0,
+    journeyStage: 0,
+    chakraIndex: 0,
+    isComplete: false,
     pregunta: "",
     interpretation: null as any | null,
+    showGlossary: false,
   });
+
+  const renderSafe = (val: any) => {
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object' && val !== null) {
+      return val.descripcion || val.desc || val.description || val.tipo || val.type || val.nombre || val.name || JSON.stringify(val);
+    }
+    return String(val || '');
+  };
 
   const getT = () => {
     return UI_STRINGS[session.lang || 'en'];
@@ -593,7 +621,7 @@ export default function App() {
     setSession(s => ({ ...s, isAiLoading: true }));
     try {
       const currentStages = HERO_JOURNEY_STAGES[session.lang || 'en'] || HERO_JOURNEY_STAGES['en'];
-      const stage = currentStages[Math.min(session.engine.step, currentStages.length - 1)];
+      const stage = currentStages[Math.min(session.journeyStage, currentStages.length - 1)];
       const res = await getNarrativeAction({
         cp,
         coherence,
@@ -606,14 +634,26 @@ export default function App() {
         analysis: session.analysis || undefined
       }, action);
 
+      const nextJourneyStage = res.integraOpuesto ? session.journeyStage + 1 : session.journeyStage;
+      const isComplete = nextJourneyStage >= currentStages.length;
+
       setSession(s => ({
         ...s,
         isAiLoading: false,
+        journeyStage: nextJourneyStage,
+        chakraIndex: res.integraOpuesto ? (s.chakraIndex + 1) % 7 : s.chakraIndex,
+        isComplete,
+        engine: {
+          ...s.engine,
+          currentFirma: res.firmaActual
+        },
         narrativeLog: [...s.narrativeLog, { 
           id: Date.now() + 1, 
           text: res.narrativa, 
           role: 'engine',
-          events: res.eventos
+          events: res.eventos,
+          firma: res.firmaActual,
+          question: res.preguntaIdentidad
         }]
       }));
     } catch (e) {
@@ -629,24 +669,57 @@ export default function App() {
     try {
       const arcano = calculateLifeArcanum(session.birthDate.day, session.birthDate.month, session.birthDate.year);
       const analysis = await getUniverseAnalysis(session.universeSeed, arcano, session.lang || 'en');
+      const preludeQuestions = await getPreludeQuestions(session.universeSeed, session.lang || 'en');
       
       setSession(s => ({ 
         ...s, 
         lifeArcanum: arcano,
         analysis,
-        currentView: 'novel',
+        preludeQuestions,
+        currentView: 'prelude',
         isAiLoading: false,
-        narrativeLog: [{
-          id: Date.now(),
-          role: 'engine',
-          text: session.lang === 'es' 
-            ? `El Arcano ${arcano} se activa. Te manifiestas como: ${analysis.archetype}. El tejido de la realidad vibra en ${session.universeSeed}. Esqueleto del destino: ${analysis.skeleton}`
-            : `Arcanum ${arcano} activates. You manifest as: ${analysis.archetype}. The fabric of reality vibrates in ${session.universeSeed}. Destiny Skeleton: ${analysis.skeleton}`
-        }]
       }));
     } catch (e) {
       setSession(s => ({ ...s, isAiLoading: false }));
     }
+  };
+
+  const handlePreludeChoice = (effect: number[]) => {
+    setSession(s => {
+      const nextIndex = s.preludeIndex + 1;
+      const newCp = s.engine.cp.map((v, i) => Math.max(0, Math.min(1, v + (effect[i] || 0))));
+      
+            if (nextIndex >= s.preludeQuestions.length) {
+        // Sintetizar historia para evitar que el preludio reaparezca
+        setTimeout(() => {
+          setSession(prev => ({
+            ...prev,
+            currentView: 'novel',
+            isAiLoading: false,
+            narrativeLog: [{
+              id: Date.now(),
+              role: 'engine',
+              text: prev.lang === 'es' 
+                ? `El Arcano ${prev.lifeArcanum} se activa. Te manifiestas como: ${renderSafe(prev.analysis?.archetype)}. Tu configuración probabilística (CP) se ha estabilizado. El viaje comienza...`
+                : `Arcanum ${prev.lifeArcanum} activates. You manifest as: ${renderSafe(prev.analysis?.archetype)}. Your probabilistic configuration (CP) has stabilized. The journey begins...`
+            }]
+          }));
+        }, 5000);
+
+        return {
+          ...s,
+          engine: { ...s.engine, cp: newCp },
+          currentView: 'organizing',
+          isAiLoading: true
+        };
+      }
+      
+      return {
+        ...s,
+        preludeIndex: nextIndex,
+        engine: { ...s.engine, cp: newCp }
+      };
+    });
   };
 
   const step = stepIndex > 0 && stepIndex <= 10 ? PASOS[stepIndex - 1] : null;
@@ -805,6 +878,133 @@ export default function App() {
                </div>
             </div>
           </motion.div>
+        ) : session.currentView === 'organizing' ? (
+          <motion.div 
+            key="organizing"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="min-h-screen flex items-center justify-center p-6 bg-black relative overflow-hidden"
+          >
+            <div className="absolute inset-0 opacity-20">
+               <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-purple-900/20 via-transparent to-transparent " />
+            </div>
+
+            <div className="max-w-4xl w-full z-10 space-y-12">
+              <div className="text-center space-y-4">
+                <motion.div 
+                  animate={{ rotate: 360 }} 
+                  transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                  className="mx-auto w-16 h-16 border-t-2 border-amalgam-purple rounded-full"
+                />
+                <h2 className="text-xl font-serif italic text-white uppercase tracking-[0.5em]">
+                  {session.lang === 'es' ? 'Sintetizando Destino' : 'Synthesizing Destiny'}
+                </h2>
+                <p className="text-[0.6rem] text-mystic-purple uppercase tracking-widest font-bold">
+                  {session.lang === 'es' ? 'Mapeando Isomorfismos en el NOE...' : 'Mapping Isomorphisms in the NOE...'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div className="text-[0.6rem] text-amalgam-orange uppercase tracking-widest font-bold border-b border-amalgam-orange/30 pb-2">
+                    {session.lang === 'es' ? 'Geometría del Mundo' : 'World Geometry'}
+                  </div>
+                  <div className="relative h-64 bg-black/60 border border-mystic/40 rounded-sm flex items-center justify-center overflow-hidden">
+                    <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 opacity-10">
+                      {Array(36).fill(0).map((_, i) => <div key={i} className="border border-mystic" />)}
+                    </div>
+                    {session.analysis?.lugares.map((l, i) => (
+                      <motion.div 
+                        key={i}
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: i * 0.4 }}
+                        className="absolute flex flex-col items-center gap-1"
+                        style={{ 
+                          left: `${20 + (i * 25)}%`, 
+                          top: `${30 + (i * 15 % 40)}%` 
+                        }}
+                      >
+                        <Compass className="w-6 h-6 text-amalgam-purple animate-pulse" />
+                        <span className="text-[0.5rem] text-white uppercase tracking-tighter whitespace-nowrap">{renderSafe(l.nombre)}</span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="text-[0.6rem] text-amalgam-purple uppercase tracking-widest font-bold border-b border-amalgam-purple/30 pb-2">
+                    {session.lang === 'es' ? 'Estructura Ontológica' : 'Ontological Structure'}
+                  </div>
+                  <div className="space-y-4">
+                    {session.analysis?.tensiones.map((t, i) => (
+                      <motion.div 
+                        key={i}
+                        initial={{ x: -20, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        transition={{ delay: 1 + i * 0.3 }}
+                        className="flex items-center justify-between group"
+                      >
+                        <span className="text-[0.6rem] text-cream/40 uppercase tracking-widest">{t.split(' vs ')[0]}</span>
+                        <div className="h-[1px] flex-1 mx-4 bg-mystic/20 group-hover:bg-amalgam-purple/40 transition-all" />
+                        <span className="text-[0.6rem] text-cream/40 uppercase tracking-widest">{t.split(' vs ')[1]}</span>
+                      </motion.div>
+                    ))}
+                  </div>
+                  
+                  <div className="pt-4 space-y-2">
+                    <div className="text-[0.5rem] text-mystic-purple uppercase font-bold tracking-widest">
+                      {session.lang === 'es' ? 'Arquetipo Maestro' : 'Master Archetype'}
+                    </div>
+                    <div className="text-lg font-serif italic text-white glow-purple">{renderSafe(session.analysis?.archetype)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        ) : session.currentView === 'prelude' ? (
+          <motion.div 
+            key="prelude"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="min-h-screen flex items-center justify-center p-6 bg-black"
+          >
+            <div className="max-w-xl w-full space-y-12 text-center">
+              <div className="space-y-4">
+                <div className="text-[0.6rem] uppercase tracking-[0.5em] text-amalgam-orange font-sans font-bold">Preludio de Identidad</div>
+                <h2 className="text-2xl font-serif italic text-white leading-relaxed">
+                  {session.preludeQuestions[session.preludeIndex]?.pregunta}
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {session.preludeQuestions[session.preludeIndex] && (
+                  <>
+                    <button 
+                      onClick={() => handlePreludeChoice(session.preludeQuestions[session.preludeIndex].opcionA.efecto)}
+                      className="p-8 border border-mystic/40 hover:border-amalgam-purple bg-[#12101e] text-cream/70 hover:text-white transition-all text-xs uppercase tracking-widest leading-relaxed font-sans"
+                    >
+                      {session.preludeQuestions[session.preludeIndex].opcionA.texto}
+                    </button>
+                    <button 
+                      onClick={() => handlePreludeChoice(session.preludeQuestions[session.preludeIndex].opcionB.efecto)}
+                      className="p-8 border border-mystic/40 hover:border-amalgam-orange bg-[#12101e] text-cream/70 hover:text-white transition-all text-xs uppercase tracking-widest leading-relaxed font-sans"
+                    >
+                      {session.preludeQuestions[session.preludeIndex].opcionB.texto}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="flex justify-center gap-1">
+                {session.preludeQuestions.map((_, i) => (
+                  <div key={i} className={`h-1 w-8 transition-all ${i <= session.preludeIndex ? 'bg-amalgam-purple' : 'bg-mystic/20'}`} />
+                ))}
+              </div>
+            </div>
+          </motion.div>
         ) : session.currentView === 'novel' ? (
           <motion.div 
             key="novel"
@@ -812,6 +1012,28 @@ export default function App() {
             animate={{ opacity: 1 }}
             className="h-screen flex flex-col bg-[#0D0A18] font-serif"
           >
+            {/* Journey Status Bar */}
+            <div className="fixed top-0 left-0 right-0 h-1 z-[100] flex">
+               <div 
+                 className="h-full bg-amalgam-purple transition-all duration-1000 shadow-[0_0_10px_rgba(199,125,255,1)]" 
+                 style={{ width: `${(session.journeyStage / 12) * 100}%` }} 
+               />
+            </div>
+            
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex gap-2">
+              {Array(7).fill(0).map((_, i) => (
+                <div 
+                  key={i} 
+                  className={`w-2 h-2 rounded-full border transition-all ${i <= session.chakraIndex ? 'bg-amalgam-orange border-amalgam-orange scale-110 shadow-[0_0_10px_rgba(255,154,60,0.5)]' : 'bg-transparent border-mystic/40'}`} 
+                  title={session.analysis?.chakrasMapeo[i]?.nombre || `Chakra ${i+1}`}
+                />
+              ))}
+            </div>
+
+            <div className="fixed top-8 left-1/2 -translate-x-1/2 text-[0.4rem] md:text-[0.5rem] text-mystic-purple uppercase font-sans tracking-[0.3em] font-bold z-[100] text-center w-64">
+               {HERO_JOURNEY_STAGES[session.lang || 'en'][Math.min(session.journeyStage, 11)]}
+            </div>
+
             {/* Header / HUD */}
             <div className="fixed top-0 left-0 right-0 p-6 flex justify-between items-center z-50 bg-[#0D0A18]/80 backdrop-blur-xl border-b border-mystic/30">
                <div className="flex items-center gap-10">
@@ -831,17 +1053,52 @@ export default function App() {
                     </div>
                   </div>
                </div>
-               <button 
-                 onClick={() => {
-                   const newHistory = [{...session, id: Date.now()}, ...history];
-                   setHistory(newHistory);
-                   localStorage.setItem("amalgam_grimorio", JSON.stringify(newHistory));
-                   setSession(s => ({ ...s, currentView: 'start' }));
-                 }}
-                 className="text-[0.5rem] uppercase tracking-[0.4em] px-4 py-2 hover:bg-red-500/10 hover:text-red-400 text-mystic-purple border border-transparent hover:border-red-500/20 transition-all font-sans font-bold"
-               >
-                 {t.novel.saveExit}
-               </button>
+               <div className="flex items-center">
+                 <button 
+                   onClick={() => {
+                     const newHistory = [{...session, id: Date.now()}, ...history];
+                     setHistory(newHistory);
+                     localStorage.setItem("amalgam_grimorio", JSON.stringify(newHistory));
+                     setSession(s => ({ ...s, currentView: 'start' }));
+                   }}
+                   className="text-[0.5rem] uppercase tracking-[0.4em] px-4 py-2 hover:bg-red-500/10 hover:text-red-400 text-mystic-purple border border-transparent hover:border-red-500/20 transition-all font-sans font-bold"
+                 >
+                   {t.novel.saveExit}
+                 </button>
+                 <button 
+                   onClick={() => setSession(s => ({ ...s, showGlossary: true }))}
+                   className="bg-amalgam-purple/10 p-2 border border-amalgam-purple/30 text-amalgam-purple hover:bg-amalgam-purple hover:text-white transition-all ml-4 rounded-sm"
+                   title="Amalgam Glossary"
+                 >
+                   <BookOpen className="w-3.5 h-3.5" />
+                 </button>
+               </div>
+            </div>
+
+            {/* World Status Sidebar - Left */}
+            <div className="fixed left-6 top-32 bottom-48 w-14 hidden xl:flex flex-col items-center gap-6 z-30">
+               <div className="h-full w-[1px] bg-mystic/20 absolute left-1/2 -translate-x-1/2 -z-10" />
+               {session.analysis?.lugares.map((l, i) => (
+                 <div key={i} className="group relative">
+                   <Compass className="w-5 h-5 text-mystic-purple hover:text-amalgam-purple cursor-help transition-colors" />
+                   <div className="absolute left-full ml-4 top-0 w-48 p-4 bg-[#12101e] border border-mystic opacity-0 group-hover:opacity-100 pointer-events-none transition-all scale-95 group-hover:scale-100 font-sans z-50 shadow-2xl">
+                     <div className="text-[0.6rem] text-amalgam-purple uppercase tracking-widest font-bold mb-1">{renderSafe(l.firma)}</div>
+                     <div className="text-white text-xs uppercase tracking-widest mb-1">{renderSafe(l.nombre)}</div>
+                     <div className="text-[0.6rem] text-cream/40 italic leading-relaxed">{renderSafe(l.desc)}</div>
+                   </div>
+                 </div>
+               ))}
+               <div className="flex-1" />
+               {session.analysis?.npcs.map((n, i) => (
+                 <div key={i} className="group relative">
+                   <Eye className="w-5 h-5 text-mystic-purple hover:text-amalgam-orange cursor-help transition-colors" />
+                   <div className="absolute left-full ml-4 bottom-0 w-48 p-4 bg-[#12101e] border border-mystic opacity-0 group-hover:opacity-100 pointer-events-none transition-all scale-95 group-hover:scale-100 font-sans z-50 shadow-2xl">
+                     <div className="text-white text-xs uppercase tracking-widest mb-1">{renderSafe(n.nombre)}</div>
+                     <div className="text-[0.6rem] text-amalgam-orange uppercase tracking-widest font-bold mb-1">{renderSafe(n.arquetipo)}</div>
+                     <div className="text-[0.6rem] text-cream/40 italic leading-relaxed">{renderSafe(n.polaridad)}</div>
+                   </div>
+                 </div>
+               ))}
             </div>
 
             {/* Narrative Area */}
@@ -858,8 +1115,22 @@ export default function App() {
                     {log.role === 'engine' ? (
                       <div className="space-y-6 max-w-[95%]">
                         <p className="text-xl md:text-2xl font-serif italic text-cream leading-[1.6] drop-shadow-lg whitespace-pre-wrap selection:bg-amalgam-purple/40">
-                          {log.text}
+                          {renderSafe(log.text)}
                         </p>
+                        
+                        {log.firma && (
+                           <div className="text-[0.6rem] font-mono text-amalgam-purple/50 tracking-[0.4em] uppercase">
+                             Signature: {renderSafe(log.firma)}
+                           </div>
+                        )}
+
+                        {log.question && (
+                          <div className="mt-8 p-6 bg-amalgam-orange/5 border-l-2 border-amalgam-orange font-serif">
+                            <p className="text-lg text-amalgam-orange italic leading-relaxed">
+                              {renderSafe(log.question)}
+                            </p>
+                          </div>
+                        )}
                         {log.events && (
                           <motion.div 
                             initial={{ scale: 0.9, opacity: 0 }}
@@ -867,7 +1138,7 @@ export default function App() {
                             className="inline-flex items-center gap-3 px-4 py-2 bg-amalgam-purple/5 border border-amalgam-purple/20 rounded-sm"
                           >
                             <Sparkles className="w-3 h-3 text-amalgam-purple" />
-                            <span className="text-[0.55rem] uppercase tracking-[0.2em] text-amalgam-purple italic font-sans font-bold">{log.events}</span>
+                            <span className="text-[0.55rem] uppercase tracking-[0.2em] text-amalgam-purple italic font-sans font-bold">{renderSafe(log.events)}</span>
                           </motion.div>
                         )}
                         {idx === session.narrativeLog.length - 1 && (
@@ -918,7 +1189,9 @@ export default function App() {
                    value={session.input}
                    onChange={e => setSession(s => ({ ...s, input: e.target.value }))}
                    onKeyDown={e => e.key === 'Enter' && handleNarrativeAction(session.input)}
-                   placeholder={t.novel.placeholderIntent}
+                   placeholder={session.isComplete 
+                     ? (session.lang === 'es' ? "Ahora habitas este mundo. ¿Qué deseas conversar?" : "You now inhabit this world. What do you wish to discuss?")
+                     : t.novel.placeholderIntent}
                    className="w-full bg-[#12101e]/80 backdrop-blur-xl border border-mystic p-6 pl-14 rounded-sm text-sm font-mono text-white placeholder:text-mystic-purple/40 focus:border-amalgam-orange transition-all shadow-[0_0_50px_rgba(0,0,0,0.5)] outline-none"
                  />
                  <Edit3 className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-amalgam-orange/50" />
@@ -1016,6 +1289,45 @@ export default function App() {
                 <p className="text-[0.6rem] text-mystic-purple uppercase tracking-[0.3em] italic">
                   {t.drawing.footer}
                 </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {session.showGlossary && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl p-6 flex items-center justify-center"
+          >
+            <div className="w-full max-w-2xl bg-[#12101e] border border-mystic p-8 relative shadow-2xl">
+              <button 
+                onClick={() => setSession(s => ({ ...s, showGlossary: false }))}
+                className="absolute top-6 right-6 text-mystic-purple hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              
+              <div className="mb-8 border-b border-mystic p-4">
+                <h2 className="text-2xl font-serif italic text-white uppercase tracking-widest flex items-center gap-4">
+                  <BookOpen className="w-6 h-6 text-amalgam-purple" />
+                  Biblioteca de Signaturas Amalgam
+                </h2>
+                <p className="text-[0.6rem] uppercase tracking-[0.3em] text-mystic-purple font-sans font-bold mt-2">Especificación Unificada V9</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-4 custom-scrollbar">
+                {AMALGAM_GLOSSARY.map((item, i) => (
+                  <div key={i} className="p-4 bg-black/40 border border-mystic/40 hover:border-amalgam-purple/40 transition-all">
+                    <div className="flex items-center gap-4 mb-2">
+                      <span className="text-xl font-bold text-amalgam-purple font-mono">{item.s}</span>
+                      <span className="text-xs uppercase tracking-widest text-white">{item.n}</span>
+                    </div>
+                    <p className="text-[0.65rem] text-cream/40 italic leading-relaxed">{item.e}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </motion.div>

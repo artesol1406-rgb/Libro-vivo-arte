@@ -27,12 +27,107 @@ export interface UniverseAnalysis {
   isomorphisms: string[];
   skeleton: string;
   atmosphere: string;
+  lugares: { nombre: string; firma: string; desc: string }[];
+  npcs: { nombre: string; arquetipo: string; polaridad: string }[];
+  tensiones: string[];
+  arcanosMapeo: { arcano: string; elemento: string; opuesto: string }[];
+  chakrasMapeo: { nombre: string; forma: string; desafio: string }[];
+}
+
+export interface PreludeQuestion {
+  id: number;
+  pregunta: string;
+  opcionA: { texto: string; efecto: number[] };
+  opcionB: { texto: string; efecto: number[] };
 }
 
 export interface NarrativeResponse {
   narrativa: string;
   eventos: string;
   siguienteAccion?: string;
+  preguntaIdentidad: string;
+  firmaActual: string;
+  integraOpuesto: boolean;
+}
+
+function cleanJson(text: string): string {
+  try {
+    // Try to find the first block that looks like JSON
+    const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    if (match) {
+      return match[0];
+    }
+    return text;
+  } catch {
+    return text;
+  }
+}
+
+export async function getPreludeQuestions(
+  universe: string,
+  lang: string
+): Promise<PreludeQuestion[]> {
+  const prompt = `
+    Como el Constructor de Identidades del Amalgam Engine.
+    PARA EL UNIVERSO: ${universe}
+    IDIOMA: ${lang}
+
+    GENERA 5 PREGUNTAS DE PRELUDIO. Cada una debe medir una tensión polar en el jugador (Ej: Orden vs Caos, Acción vs Contemplación).
+    Las opciones deben ser evocadoras y ligadas al tono del universo.
+    Cada opción debe tener un "efecto" que es un array de 7 números (del -0.2 al 0.2) representando el impacto en el vector CP.
+
+    RETORNA UN JSON con la propiedad "questions" que sea una lista de objetos con id, pregunta, opcionA y opcionB (con texto y efecto).
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            questions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.NUMBER },
+                  pregunta: { type: Type.STRING },
+                  opcionA: {
+                    type: Type.OBJECT,
+                    properties: {
+                      texto: { type: Type.STRING },
+                      efecto: { type: Type.ARRAY, items: { type: Type.NUMBER } }
+                    },
+                    required: ["texto", "efecto"]
+                  },
+                  opcionB: {
+                    type: Type.OBJECT,
+                    properties: {
+                      texto: { type: Type.STRING },
+                      efecto: { type: Type.ARRAY, items: { type: Type.NUMBER } }
+                    },
+                    required: ["texto", "efecto"]
+                  }
+                },
+                required: ["id", "pregunta", "opcionA", "opcionB"]
+              }
+            }
+          },
+          required: ["questions"]
+        }
+      },
+    });
+
+    const cleaned = cleanJson(response.text || "{}");
+    const data = JSON.parse(cleaned);
+    return data.questions || [];
+  } catch (error) {
+    console.error("Prelude Error:", error);
+    return [];
+  }
 }
 
 export async function getUniverseAnalysis(
@@ -41,20 +136,23 @@ export async function getUniverseAnalysis(
   lang: string
 ): Promise<UniverseAnalysis> {
   const prompt = `
-    Eres el Analista Simbólico del Amalgam Engine.
-    TU TAREA: Realizar un análisis profundo de la "Semilla de Universo" y su relación isomorfa con el "Arcano Maestro" del jugador.
+    Eres el Analista Ontológico del Amalgam Engine V9.
+    Realiza un análisis fractal de la Semilla: ${universe} con el Arcano: ${arcano}.
 
-    SEMILLA: ${universe}
-    ARCANO: ${arcano}
-    IDIOMA: ${lang}
+    DEBES GENERAR UN JSON CON LOS SIGUIENTES CAMPOS (TODOS DEBEN SER STRINGS O ARRAYS DE STRINGS, NUNCA OBJETOS ANIDADOS DENTRO DE LAS PROPIEDADES DE TEXTO):
+    1. archetype: Arquetipo del jugador (String).
+    2. isomorphisms: Conceptos base (Array of Strings).
+    3. skeleton: El esqueleto de la historia (Un solo bucle del Viaje del Héroe).
+    4. atmosphere: Tono estético.
+    5. lugares: 3 lugares vinculados al NOE (Objeto con nombre, firma, desc como Strings).
+    6. npcs: 3 personajes con polaridades (Objeto con nombre, arquetipo, polaridad como Strings).
+    7. tensiones: 3 tensiones nucleares (Array of Strings).
+    8. arcanosMapeo: Mapea 10 de los 21 Arcanos restantes a elementos del mundo en pares de opuestos (Ej: El Sol y La Luna representados por dos facciones).
+    9. chakrasMapeo: Define los 7 Chakras/puntos de poder en este mundo, su FORMA y el DESAFÍO de integración.
 
-    DEBES GENERAR:
-    1. Arquetipo del Protagonista: Cómo se manifiesta ese Arcano como personaje en ese universo específico.
-    2. Isomorfismos: 3-4 conceptos o elementos del universo que reflejan directamente la física simbólica del Arcano.
-    3. Esqueleto Fractal (Skelton): Una estructura ósea de la historia (inicio, tensión, resolución simbólica) que se adapta al viaje del héroe.
-    4. Atmósfera: La cualidad estética y tonal de este mundo.
+    IMPORTANTE: No devuelvas objetos para 'arquetipo' o 'polaridad'. Deben ser descripciones en texto plano.
 
-    Genera un JSON en el idioma solicitado (${lang}).
+    Genera el JSON en ${lang}.
   `;
 
   try {
@@ -67,26 +165,77 @@ export async function getUniverseAnalysis(
           type: Type.OBJECT,
           properties: {
             archetype: { type: Type.STRING },
-            isomorphisms: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            },
+            isomorphisms: { type: Type.ARRAY, items: { type: Type.STRING } },
             skeleton: { type: Type.STRING },
             atmosphere: { type: Type.STRING },
+            lugares: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  nombre: { type: Type.STRING },
+                  firma: { type: Type.STRING },
+                  desc: { type: Type.STRING },
+                },
+                required: ["nombre", "firma", "desc"]
+              }
+            },
+            npcs: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  nombre: { type: Type.STRING },
+                  arquetipo: { type: Type.STRING },
+                  polaridad: { type: Type.STRING },
+                },
+                required: ["nombre", "arquetipo", "polaridad"]
+              }
+            },
+            tensiones: { type: Type.ARRAY, items: { type: Type.STRING } },
+            arcanosMapeo: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  arcano: { type: Type.STRING },
+                  elemento: { type: Type.STRING },
+                  opuesto: { type: Type.STRING },
+                },
+                required: ["arcano", "elemento", "opuesto"]
+              }
+            },
+            chakrasMapeo: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  nombre: { type: Type.STRING },
+                  forma: { type: Type.STRING },
+                  desafio: { type: Type.STRING },
+                },
+                required: ["nombre", "forma", "desafio"]
+              }
+            }
           },
-          required: ["archetype", "isomorphisms", "skeleton", "atmosphere"],
+          required: ["archetype", "isomorphisms", "skeleton", "atmosphere", "lugares", "npcs", "tensiones", "arcanosMapeo", "chakrasMapeo"],
         },
       },
     });
 
-    return JSON.parse(response.text || "{}") as UniverseAnalysis;
+    const cleaned = cleanJson(response.text || "{}");
+    return JSON.parse(cleaned) as UniverseAnalysis;
   } catch (error) {
-    console.error("Analysis Error:", error);
     return {
       archetype: "Desconocido",
       isomorphisms: [],
       skeleton: "Un camino oscuro",
-      atmosphere: "Gris"
+      atmosphere: "Gris",
+      lugares: [],
+      npcs: [],
+      tensiones: [],
+      arcanosMapeo: [],
+      chakrasMapeo: []
     };
   }
 }
@@ -96,34 +245,25 @@ export async function getNarrativeAction(
   userAction: string
 ): Promise<NarrativeResponse> {
   const prompt = `
-    Eres el Amalgam Engine V8. Novela interactiva de alta fidelidad simbólica.
+    Eres el Amalgam Engine V9.
     
-    CONOCIMIENTO PROFUNDO DEL MUNDO:
-    - Análisis Estructural: ${JSON.stringify(state.analysis)}
-    - Arquetipo Protagonista: ${state.analysis?.archetype}
-    - Esqueleto Fractal: ${state.analysis?.skeleton}
+    ESTADO ACTUAL:
+    - Análisis: ${JSON.stringify(state.analysis)}
+    - CP Actual (Identidad): [${state.cp.map(n => n.toFixed(2)).join(', ')}] (Establece la perspectiva del mundo).
+    - Etapa Viaje del Héroe: ${state.stage}
+    - Nivel de Integración: ${state.coherence.toFixed(2)}
     
-    ESTADO DEL JUGADOR:
-    - Universo: ${state.universe}
-    - Arcano: ${state.arcano}
-    - Viaje: ${state.stage}
-    - Coherencia: ${state.coherence.toFixed(4)}
-    - Tensión: ${state.tension.toFixed(4)}
-    
-    ACCIÓN DEL JUGADOR: "${userAction}"
+    ACCIÓN: "${userAction}"
 
-    REGLAS:
+    REGLAS ONTOLÓGICAS:
     1. IDIOMA: ${state.lang}.
-    2. Usa el Arquetipo y el Esqueleto Fractal para guiar la narrativa, pero que nazca de la interacción actual.
-    3. No reveles términos técnicos. 
-    4. Estilo literario coherente con: ${state.analysis?.atmosphere || state.universe}.
-    4. RESPUESTA: Describe qué sucede, refleja el modo (integración/ruptura) y avanza sutilmente la etapa del héroe.
-    5. DIBUJOS: Si el jugador menciona que ha realizado un dibujo, interpreta ese acto como una manifestación física de su alma que altera el entorno del relato.
+    2. DIÁLOGOS ORIGINALES: No uses frases genéricas. Los NPCs deben hablar desde su polaridad específica (${state.analysis?.npcs.map(n => n.nombre + ": " + n.polaridad).join(", ")}) filtrada por el CP del jugador.
+    3. PERSPECTIVA DINÁMICA: El CP [${state.cp.map(n => n.toFixed(2)).join(', ')}] es la lente del jugador. Si el CP es alto en tensiones destructivas, el mundo se ve hostil; si es armónico, se ve interconectado. No describas el mundo de forma objetiva, describe la PERCEPCIÓN del jugador.
+    4. TENSIÓN NUCLEARES: Cada interacción debe girar en torno a: ${state.analysis?.tensiones.join(", ")}.
+    5. INTEGRACIÓN: Evalúa si el jugador está resolviendo o exacerbando las tensiones. Pon "integraOpuesto: true" solo si hay un avance real en la resolución de una dualidad.
+    6. PREGUNTA: La pregunta final debe ser una encrucijada filosófica ligada al Arcano Maestro y la Etapa del Héroe actual.
     
-    Genera un JSON con:
-    - narrativa: 2-3 párrafos inmersivos (usa Markdown para énfasis si es necesario).
-    - eventos: Una frase corta que describa el cambio simbólico (ej: "La brújula apunta al norte invisible").
-    - siguienteAccion: Una invitación sugerida y misteriosa.
+    JSON: { narrativa, eventos, siguienteAccion, preguntaIdentidad, firmaActual, integraOpuesto }
   `;
 
   try {
@@ -132,24 +272,19 @@ export async function getNarrativeAction(
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            narrativa: { type: Type.STRING },
-            eventos: { type: Type.STRING },
-            siguienteAccion: { type: Type.STRING },
-          },
-          required: ["narrativa", "eventos"],
-        },
       },
     });
 
-    return JSON.parse(response.text || "{}") as NarrativeResponse;
+    const cleaned = cleanJson(response.text || "{}");
+    return JSON.parse(cleaned) as NarrativeResponse;
   } catch (error) {
-    console.error("Narrative Engine Error:", error);
     return {
-      narrativa: "Una sombra cruza el campo de visión. El Motor Amalgam respira con dificultad, pero la historia debe continuar...",
-      eventos: "Error de conexión con el motor central."
+      narrativa: "El motor busca una nueva geodésica.",
+      eventos: "Falla de sincronización.",
+      preguntaIdentidad: "¿Cómo reconstruirás el vacío?",
+      firmaActual: "S { Ξ }",
+      integraOpuesto: false
     };
   }
 }
+
