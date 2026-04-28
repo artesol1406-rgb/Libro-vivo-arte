@@ -18,6 +18,7 @@ export interface NarrativeState {
   arcano: string;
   universe: string;
   history: string[];
+  lang: string;
 }
 
 export interface NarrativeResponse {
@@ -45,7 +46,8 @@ export async function getNarrativeAction(
     ACCIÓN DEL JUGADOR: "${userAction}"
 
     REGLAS DE NARRACIÓN (OBLIGATORIAS):
-    1. SILENCIO ESTRUCTURAL: Nunca nombres términos técnicos (CP, Variancia, Lyapunov, Arcano).
+    1. IDIOMA: Responde EXCLUSIVAMENTE en el idioma: ${state.lang}. 
+    2. SILENCIO ESTRUCTURAL: Nunca nombres términos técnicos (CP, Variancia, Lyapunov, Arcano).
     2. TRANSFORMACIÓN: Sustituye técnica por imagen: Tensión -> "el aire se vuelve pesado"; Coherencia alta -> "todo parece encajar".
     3. ESTILO: Usa el tono literario de la semilla (${state.universe}).
     4. RESPUESTA: Describe qué sucede, refleja el modo (integración/ruptura) y avanza sutilmente la etapa del héroe.
