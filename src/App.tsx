@@ -667,6 +667,7 @@ export default function App() {
     setSession(s => ({ ...s, isAiLoading: true }));
     
     try {
+      // Proceso de carga simulado visualmente mientras llega la respuesta real
       const arcano = calculateLifeArcanum(session.birthDate.day, session.birthDate.month, session.birthDate.year);
       const analysis = await getUniverseAnalysis(session.universeSeed, arcano, session.lang || 'en');
       const preludeQuestions = await getPreludeQuestions(session.universeSeed, session.lang || 'en');
@@ -823,7 +824,56 @@ export default function App() {
             exit={{ opacity: 0, x: -50 }}
             className="min-h-screen flex items-center justify-center p-6 bg-mystic"
           >
-            <div className="max-w-md w-full space-y-12 bg-[#12101e] p-12 rounded-sm border border-mystic shadow-2xl relative">
+            <div className="max-w-md w-full space-y-12 bg-[#12101e] p-12 rounded-sm border border-mystic shadow-2xl relative overflow-hidden">
+               {session.isAiLoading && (
+                 <motion.div 
+                   initial={{ opacity: 0 }}
+                   animate={{ opacity: 1 }}
+                   className="absolute inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-8"
+                 >
+                   <div className="w-full space-y-10">
+                     <div className="space-y-4 text-center">
+                       <h3 className="text-amalgam-orange text-[0.6rem] uppercase tracking-[0.5em] font-bold">
+                         {session.lang === 'es' ? 'Tejiendo Ontología' : 'Weaving Ontology'}
+                       </h3>
+                       <p className="text-cream/40 text-[0.5rem] uppercase tracking-widest italic animate-pulse">
+                         {session.lang === 'es' ? 'Mapeando registros akáshicos...' : 'Mapping Akashic records...'}
+                       </p>
+                     </div>
+                     
+                     <div className="relative h-1 w-full bg-mystic/20 rounded-full overflow-hidden">
+                       <motion.div 
+                         className="absolute top-0 left-0 h-full bg-gradient-to-r from-amalgam-purple to-amalgam-orange shadow-[0_0_20px_rgba(255,154,60,0.5)]"
+                         initial={{ width: "0%" }}
+                         animate={{ width: "100%" }}
+                         transition={{ duration: 6, ease: "easeInOut" }}
+                       />
+                     </div>
+
+                     <div className="grid grid-cols-1 gap-2">
+                       {[
+                         { es: "Calculando Arcano Maestro...", en: "Calculating Master Arcanum..." },
+                         { es: "Fractalizando Semilla Universa...", en: "Fractalizing Universe Seed..." },
+                         { es: "Sintonizando Vectores CP...", en: "Tuning CP Vectors..." }
+                       ].map((step, i) => (
+                         <motion.div 
+                           key={i}
+                           initial={{ opacity: 0, x: -10 }}
+                           animate={{ opacity: 1, x: 0 }}
+                           transition={{ delay: i * 1.5 }}
+                           className="flex items-center gap-3"
+                         >
+                            <div className="w-1 h-1 rounded-full bg-amalgam-orange/50" />
+                            <span className="text-[0.5rem] text-cream/20 uppercase tracking-widest font-sans">
+                              {session.lang === 'es' ? step.es : step.en}
+                            </span>
+                         </motion.div>
+                       ))}
+                     </div>
+                   </div>
+                 </motion.div>
+               )}
+               
                <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-amalgam-purple/20 border border-amalgam-purple flex items-center justify-center">
                   <Activity className="w-5 h-5 text-amalgam-purple" />
                </div>
