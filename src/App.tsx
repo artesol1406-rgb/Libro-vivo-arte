@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, type MouseEvent, type TouchEvent, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { getNarrativeAction } from "./services/geminiService";
+import { getNarrativeAction, getUniverseAnalysis, type UniverseAnalysis } from "./services/geminiService";
 import { 
   Moon, 
   Sun, 
@@ -529,6 +529,7 @@ export default function App() {
     isAiLoading: false,
     isDrawing: false,
     drawingType: 'Universal',
+    analysis: null as UniverseAnalysis | null,
     pregunta: "",
     interpretation: null as any | null,
   });
@@ -601,7 +602,8 @@ export default function App() {
         arcano: session.lifeArcanum,
         universe: session.universeSeed,
         history: session.narrativeLog.map(l => l.text),
-        lang: session.lang || 'en'
+        lang: session.lang || 'en',
+        analysis: session.analysis || undefined
       }, action);
 
       setSession(s => ({
@@ -619,24 +621,32 @@ export default function App() {
     }
   };
 
-  const handleInit = () => {
+  const handleInit = async () => {
     if (!session.birthDate.day || !session.birthDate.month || !session.birthDate.year || !session.universeSeed) return;
     
-    const arcano = calculateLifeArcanum(session.birthDate.day, session.birthDate.month, session.birthDate.year);
-    const t = getT();
+    setSession(s => ({ ...s, isAiLoading: true }));
     
-    setSession(s => ({ 
-      ...s, 
-      lifeArcanum: arcano,
-      currentView: 'novel',
-      narrativeLog: [{
-        id: Date.now(),
-        role: 'engine',
-        text: session.lang === 'es' 
-          ? `El Arcano ${arcano} se activa. Te encuentras en el umbral de ${session.universeSeed}. El tejido de la realidad comienza a vibrar con tu presencia...`
-          : `Arcanum ${arcano} activates. You stand at the threshold of ${session.universeSeed}. The fabric of reality begins to vibrate with your presence...`
-      }]
-    }));
+    try {
+      const arcano = calculateLifeArcanum(session.birthDate.day, session.birthDate.month, session.birthDate.year);
+      const analysis = await getUniverseAnalysis(session.universeSeed, arcano, session.lang || 'en');
+      
+      setSession(s => ({ 
+        ...s, 
+        lifeArcanum: arcano,
+        analysis,
+        currentView: 'novel',
+        isAiLoading: false,
+        narrativeLog: [{
+          id: Date.now(),
+          role: 'engine',
+          text: session.lang === 'es' 
+            ? `El Arcano ${arcano} se activa. Te manifiestas como: ${analysis.archetype}. El tejido de la realidad vibra en ${session.universeSeed}. Esqueleto del destino: ${analysis.skeleton}`
+            : `Arcanum ${arcano} activates. You manifest as: ${analysis.archetype}. The fabric of reality vibrates in ${session.universeSeed}. Destiny Skeleton: ${analysis.skeleton}`
+        }]
+      }));
+    } catch (e) {
+      setSession(s => ({ ...s, isAiLoading: false }));
+    }
   };
 
   const step = stepIndex > 0 && stepIndex <= 10 ? PASOS[stepIndex - 1] : null;
